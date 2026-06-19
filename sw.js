@@ -1,4 +1,4 @@
-const CACHE = 'timetable-v3';
+const CACHE = 'timetable-v4';
 const SHELL = ['/index.html', '/manifest.json'];
 
 self.addEventListener('install', function(e){
@@ -28,16 +28,16 @@ self.addEventListener('fetch', function(e){
     return; // don't call e.respondWith() — browser handles it natively
   }
 
-  // App shell — cache first
+  // Network-first strategy: always try fresh content, fall back to cache
   e.respondWith(
-    caches.match(e.request).then(function(cached){
-      return cached || fetch(e.request).then(function(resp){
-        if(resp && resp.status === 200){
-          var clone = resp.clone();
-          caches.open(CACHE).then(function(c){ c.put(e.request, clone); });
-        }
-        return resp;
-      });
+    fetch(e.request).then(function(resp){
+      if(resp && resp.status === 200){
+        var clone = resp.clone();
+        caches.open(CACHE).then(function(c){ c.put(e.request, clone); });
+      }
+      return resp;
+    }).catch(function(){
+      return caches.match(e.request);
     })
   );
 });
