@@ -938,17 +938,20 @@
         state.fetching = true;
         if (!silent) render();
         fetch('/.netlify/functions/timetable?t=' + Date.now())
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (!r.ok) return r.json().catch(function () { return { error: 'http_' + r.status }; });
+            return r.json();
+          })
           .then(function (json) {
             if (json && json.error === 'auth') { state.fetchError = 'auth'; }
-            else if (json && json.error) { state.fetchError = json.message || json.error; }
+            else if (json && json.error) { if (!silent || !state.data) state.fetchError = json.message || json.error; }
             else { state.data = json; state.lastFetch = new Date(); state.fetchError = null; setLocal('cached-timetable', json); setLocal('cached-time', new Date().toISOString()); }
             state.fetching = false; render();
           })
           .catch(function (e) {
             var cached = getLocal('cached-timetable');
             if (cached && !state.data) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
-            state.fetchError = (e && e.message) || 'Could not load timetable';
+            if (!silent || !state.data) state.fetchError = (e && e.message) || 'Could not load timetable';
             state.fetching = false; render();
           });
       }
