@@ -1321,18 +1321,16 @@
       var dp = null;
       window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); dp = e; });
       function openInstall() {
+        if (dp) { dp.prompt(); dp.userChoice.then(function () { dp = null; }); return; }
         var ua = navigator.userAgent || '';
-        var ios = /iPhone|iPad|iPod/i.test(ua), android = /Android/i.test(ua);
+        var ios = /iPhone|iPad|iPod/i.test(ua);
         var body = ios
           ? '<p style="font-size:14px;line-height:1.8;margin:0">In <b>Safari</b>:<br>1. Tap the <b>Share ⬆️</b> icon at the bottom<br>2. Tap <b>Add to Home Screen</b><br>3. Tap <b>Add</b> ✅</p>'
-          : android
-            ? '<p style="font-size:14px;line-height:1.8;margin:0 0 12px">In <b>Chrome</b>:<br>1. Tap <b>⋮</b> menu<br>2. Tap <b>Add to Home screen</b><br>3. Confirm ✅</p>' + (dp ? '<button class="btn btn-primary" id="btnNow">Install Now</button>' : '')
-            : '<p style="font-size:14px;line-height:1.8;margin:0">Open on your phone in Chrome or Safari and use <b>Add to Home Screen</b>.</p>';
+          : '<p style="font-size:14px;line-height:1.8;margin:0">Open on your phone in Chrome or Safari and use <b>Add to Home Screen</b>.</p>';
         var ov = document.createElement('div'); ov.className = 'overlay';
         ov.innerHTML = '<div class="sheet"><div class="sheet-head"><h2>📲 Install App</h2><button class="icon-btn" id="closeInst">✕</button></div><div class="sheet-body">' + body + '</div></div>';
         document.body.appendChild(ov);
         document.getElementById('closeInst').onclick = function () { ov.remove(); };
-        if (android && dp) { var b = document.getElementById('btnNow'); if (b) b.onclick = function () { dp.prompt(); dp.userChoice.then(function () { dp = null; ov.remove(); }); }; }
       }
 
       // ── Init ────────────────────────────────────────────────────
