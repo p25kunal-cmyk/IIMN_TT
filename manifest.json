@@ -1,6 +1,6 @@
 {
-  "name": "MBA Term IV Timetable",
-  "short_name": "Term IV",
+  "name": "IIM Timetable",
+  "short_name": "IIM Timetable",
   "description": "Live MBA timetable with attendance tracking",
   "start_url": "/",
   "display": "standalone",
