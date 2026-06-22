@@ -139,7 +139,7 @@
     }
     
     @media all and (display-mode: standalone) {
-      #btnInstall {
+      #btnInstall, #btnInstallLogin {
         display: none !important;
       }
     }
@@ -1398,10 +1398,12 @@
           '<div class="setup-title">IIMN Timetable</div>' +
           '<div class="setup-sub">Welcome! Please sign in with your <b>@iimnagpur.ac.in</b> Google account to view your schedule.</div>' +
           '<button class="btn btn-primary" id="btnMainLogin">Sign in with Google</button>' +
+          '<button class="btn" id="btnInstallLogin" style="margin-top:10px;">Install App</button>' +
           '</div>';
         document.getElementById('btnMainLogin').onclick = function () {
           window.fbSignInWithPopup(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
         };
+        document.getElementById('btnInstallLogin').onclick = openInstall;
       }
       function renderError(err) {
         var isAuth = err === 'auth';
