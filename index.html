@@ -937,7 +937,7 @@
       function fetchData(silent) {
         state.fetching = true;
         if (!silent) render();
-        fetch('/.netlify/functions/timetable?t=' + Date.now())
+        fetch('/api/timetable?t=' + Date.now())
           .then(function (r) {
             if (!r.ok) return r.json().catch(function () { return { error: 'http_' + r.status }; });
             return r.json();
