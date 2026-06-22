@@ -1150,7 +1150,7 @@
       // ── Timetable page ──────────────────────────────────────────
       function renderTimetable() {
         var events = buildEvents(), nn = getNowNext(events), td = todayStr();
-        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + syncHtml() + boardHtml(nn) + '</div>' +
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '<div id="tick-update">' + syncHtml() + boardHtml(nn) + '</div></div>' +
           (state.mySubjects.length === 0
             ? '<div class="empty-state">No subjects selected.<br><br>Tap <b>📚</b> to pick yours.</div>'
             : '<div class="days">' + daysHtml(events, td) + '</div>') +
@@ -1450,8 +1450,16 @@
 
         render();
         fetchData();
-        setInterval(function () { if (state.data) render(); }, 15000);
+        setInterval(function () { if (state.data && currentPage === 'timetable') updateTick(); }, 15000);
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () { });
+      }
+      
+      function updateTick() {
+        var el = document.getElementById('tick-update');
+        if (el) {
+          var events = buildEvents(), nn = getNowNext(events);
+          el.innerHTML = syncHtml() + boardHtml(nn);
+        }
       }
       init();
     })();
