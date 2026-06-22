@@ -956,7 +956,7 @@
         return null;
       }
 
-      var state = { data: null, mySubjects: [], attendance: {}, lastFetch: null, fetchError: null, fetching: false, user: null };
+      var state = { data: null, mySubjects: [], attendance: {}, lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false };
       function getLocal(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
       function setLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
       
@@ -1072,6 +1072,9 @@
 
       // ── Render ──────────────────────────────────────────────────
       function render() {
+        if (!state.authInitialized) return renderLoading();
+        if (state.authInitialized && !state.user) return renderLogin();
+        
         if (state.fetchError === 'auth' && !state.data) return renderError('auth');
         if (state.fetchError && !state.data) return renderError(state.fetchError);
         if (!state.data) return renderLoading();
@@ -1334,7 +1337,18 @@
       }
 
       function renderLoading() {
-        ROOT.innerHTML = '<div class="empty-state" style="padding-top:80px;"><div style="font-size:32px;margin-bottom:12px;">⏳</div>Loading timetable…</div>';
+        ROOT.innerHTML = '<div class="empty-state" style="padding-top:80px;"><div style="font-size:32px;margin-bottom:12px;">⏳</div>Loading…</div>';
+      }
+      function renderLogin() {
+        ROOT.innerHTML = '<div class="setup-page" style="margin-top:20vh;">' +
+          '<div class="setup-logo">🎓</div>' +
+          '<div class="setup-title">IIMN Timetable</div>' +
+          '<div class="setup-sub">Welcome! Please sign in with your <b>@iimnagpur.ac.in</b> Google account to view your schedule.</div>' +
+          '<button class="btn btn-primary" id="btnMainLogin">Sign in with Google</button>' +
+          '</div>';
+        document.getElementById('btnMainLogin').onclick = function () {
+          window.fbSignInWithPopup(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
+        };
       }
       function renderError(err) {
         var isAuth = err === 'auth';
@@ -1407,6 +1421,7 @@
         if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
         
         window.fbOnAuthStateChanged(window.fbAuth, function(user) {
+          state.authInitialized = true;
           if (user) {
             if (!user.email.endsWith('@iimnagpur.ac.in')) {
               alert('Please sign in using your @iimnagpur.ac.in Google account.');
