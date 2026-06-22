@@ -83,11 +83,6 @@
 
     /* Header */
     .header {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      background: var(--bg);
-      border-bottom: 1px solid var(--border);
       padding: 12px 16px;
       padding-top: calc(12px + env(safe-area-inset-top));
       padding-left: calc(16px + env(safe-area-inset-left));
@@ -240,6 +235,15 @@
       100% {
         box-shadow: 0 0 0 0 rgba(31, 157, 92, 0);
       }
+    }
+
+    .sticky-container {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
     }
 
     /* Board */
@@ -1145,7 +1149,7 @@
       // ── Timetable page ──────────────────────────────────────────
       function renderTimetable() {
         var events = buildEvents(), nn = getNowNext(events), td = todayStr();
-        ROOT.innerHTML = hdrHtml() + syncHtml() + boardHtml(nn) +
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + syncHtml() + boardHtml(nn) + '</div>' +
           (state.mySubjects.length === 0
             ? '<div class="empty-state">No subjects selected.<br><br>Tap <b>📚</b> to pick yours.</div>'
             : '<div class="days">' + daysHtml(events, td) + '</div>') +
@@ -1208,7 +1212,7 @@
 
       // ── Calendar page ───────────────────────────────────────────
       function renderCalendar() {
-        ROOT.innerHTML = hdrHtml() + navHtml();
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' + navHtml();
         var nav = ROOT.querySelector('.bottom-nav');
         var events = buildEvents();
         var page = document.createElement('div'); page.className = 'cal-page';
@@ -1296,7 +1300,7 @@
 
       // ── Attendance page ─────────────────────────────────────────
       function renderAttendance() {
-        ROOT.innerHTML = hdrHtml() + navHtml();
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' + navHtml();
         var nav = ROOT.querySelector('.bottom-nav');
         var page = document.createElement('div'); page.className = 'att-page';
         if (!state.mySubjects.length) {
@@ -1445,7 +1449,6 @@
 
         render();
         fetchData();
-        setInterval(function () { fetchData(true); }, 60000);
         setInterval(function () { if (state.data) render(); }, 15000);
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () { });
       }
