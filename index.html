@@ -143,6 +143,16 @@
       transform: scale(0.88);
     }
 
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      flex-shrink: 0;
+      object-fit: cover;
+    }
+
     .icon-btn.spinning svg {
       animation: spin .8s linear infinite;
     }
@@ -895,7 +905,37 @@
 
 <body>
   <div id="root"></div>
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyADOXv5tMuN_jw8iuWOp8sJ0diGYn-KwQE",
+      authDomain: "iimn-tt-46c86.firebaseapp.com",
+      projectId: "iimn-tt-46c86",
+      storageBucket: "iimn-tt-46c86.firebasestorage.app",
+      messagingSenderId: "782167847284",
+      appId: "1:782167847284:web:4eb8c62f2345bd40ad3c21",
+      measurementId: "G-M1F1Q49375"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const googleProvider = new GoogleAuthProvider();
+
+    // Export firebase objects to window for use inside IIFE
+    window.fbAuth = auth;
+    window.fbDb = db;
+    window.fbGoogleProvider = googleProvider;
+    window.fbSignInWithPopup = signInWithPopup;
+    window.fbSignOut = signOut;
+    window.fbOnAuthStateChanged = onAuthStateChanged;
+    window.fbDoc = doc;
+    window.fbGetDoc = getDoc;
+    window.fbSetDoc = setDoc;
+
     (function () {
       var ROOT = document.getElementById('root');
       var currentPage = 'timetable'; // 'timetable' | 'attendance' | 'calendar'
@@ -916,13 +956,22 @@
         return null;
       }
 
-      var state = { data: null, mySubjects: [], attendance: {}, lastFetch: null, fetchError: null, fetching: false };
+      var state = { data: null, mySubjects: [], attendance: {}, lastFetch: null, fetchError: null, fetching: false, user: null };
       function getLocal(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
       function setLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
+      
+      function syncToFirebase() {
+        if (!state.user) return;
+        window.fbSetDoc(window.fbDoc(window.fbDb, "users", state.user.uid), {
+          mySubjects: state.mySubjects,
+          attendance: state.attendance
+        }, { merge: true }).catch(console.error);
+      }
       function isAbsent(lid) { return !!state.attendance[lid]; }
       function toggleAttendance(lid) {
         if (state.attendance[lid]) delete state.attendance[lid]; else state.attendance[lid] = true;
         setLocal('attendance', state.attendance);
+        syncToFirebase();
       }
 
       // ── Theme ──────────────────────────────────────────────────
@@ -1033,9 +1082,14 @@
 
       // ── Header ──────────────────────────────────────────────────
       function hdrHtml() {
+        var userBtn = state.user 
+          ? '<img src="' + esc(state.user.photoURL) + '" class="user-avatar" id="btnUser" title="Sign out (' + esc(state.user.email) + ')">'
+          : '<button class="icon-btn" id="btnUser" title="Sign in with Google">👤</button>';
+
         return '<div class="header">' +
           '<div class="title">Term IV<small>Timetable · by Kunal Jakhotiya</small></div>' +
           '<div class="header-actions">' +
+          userBtn +
           '<button class="icon-btn" id="btnDark" title="Toggle Dark Mode">' + (darkMode ? '☀️' : '🌙') + '</button>' +
           '<button class="icon-btn" id="btnInstall" title="Install App">📲</button>' +
           '<button class="icon-btn" id="btnSubjects" title="My Subjects">📚</button>' +
@@ -1065,10 +1119,18 @@
         var bi = document.getElementById('btnInstall');
         var bs = document.getElementById('btnSubjects');
         var br = document.getElementById('btnRefresh');
+        var bu = document.getElementById('btnUser');
         if (bd) bd.onclick = function () { applyTheme(!darkMode); render(); };
         if (bi) bi.onclick = openInstall;
         if (bs) bs.onclick = openPicker;
         if (br) br.onclick = function () { fetchData(); };
+        if (bu) bu.onclick = function () {
+          if (state.user) {
+            if (confirm('Sign out of ' + state.user.email + '?')) window.fbSignOut(window.fbAuth);
+          } else {
+            window.fbSignInWithPopup(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
+          }
+        };
       }
       function bindNav() {
         var t = document.getElementById('navTT'), c = document.getElementById('navCal'), a = document.getElementById('navAT');
@@ -1317,7 +1379,7 @@
         document.getElementById('selAll').onclick = function () { selected = keys.slice(); draw(document.getElementById('pkrSearch').value); };
         document.getElementById('clrAll').onclick = function () { selected = []; draw(document.getElementById('pkrSearch').value); };
         document.getElementById('closePkr').onclick = function () { ov.remove(); };
-        document.getElementById('saveSub').onclick = function () { state.mySubjects = selected; setLocal('my-subjects', selected); ov.remove(); render(); };
+        document.getElementById('saveSub').onclick = function () { state.mySubjects = selected; setLocal('my-subjects', selected); syncToFirebase(); ov.remove(); render(); };
       }
 
       // ── Install ─────────────────────────────────────────────────
@@ -1343,6 +1405,29 @@
         var att = getLocal('attendance'); if (att) state.attendance = att;
         var cached = getLocal('cached-timetable');
         if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
+        
+        window.fbOnAuthStateChanged(window.fbAuth, function(user) {
+          if (user) {
+            if (!user.email.endsWith('@iimnagpur.ac.in')) {
+              alert('Please sign in using your @iimnagpur.ac.in Google account.');
+              window.fbSignOut(window.fbAuth);
+              return;
+            }
+            state.user = user;
+            window.fbGetDoc(window.fbDoc(window.fbDb, "users", user.uid)).then(function(docSnap) {
+              if (docSnap.exists()) {
+                var d = docSnap.data();
+                if (d.mySubjects) { state.mySubjects = d.mySubjects; setLocal('my-subjects', d.mySubjects); }
+                if (d.attendance) { state.attendance = Object.assign({}, state.attendance, d.attendance); setLocal('attendance', state.attendance); }
+              }
+              render();
+            }).catch(console.error);
+          } else {
+            state.user = null;
+          }
+          render();
+        });
+
         render();
         fetchData();
         setInterval(function () { fetchData(true); }, 60000);
