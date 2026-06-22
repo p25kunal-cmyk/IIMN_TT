@@ -296,6 +296,20 @@
       font-size: 11px;
       color: var(--text-dim);
       font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .seat-badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: 10px;
+      color: var(--text);
+      background: var(--bg-elev-2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
     }
 
     .board-meta {
@@ -709,21 +723,44 @@
       margin-right: 12px;
     }
 
+    .chip-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding: 4px 2px;
+    }
+
+    .chip-item:last-child {
+      border-bottom: none;
+    }
+
     .chip-list label {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 2px;
-      border-bottom: 1px solid var(--border);
       cursor: pointer;
       font-size: 14px;
+      flex-grow: 1;
+      padding: 4px 0;
+    }
+    
+    .seat-input {
+      width: 55px;
+      padding: 6px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--text);
+      text-align: center;
+    }
+    
+    .seat-input.hidden {
+      display: none;
     }
 
-    .chip-list label:last-child {
-      border-bottom: none;
-    }
-
-    .chip-list input {
+    .chip-list input[type="checkbox"] {
       width: 17px;
       height: 17px;
       accent-color: var(--accent);
@@ -961,7 +998,7 @@
         return null;
       }
 
-      var state = { data: null, mySubjects: [], attendance: {}, lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false };
+      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false };
       function getLocal(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
       function setLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
       
@@ -969,7 +1006,8 @@
         if (!state.user) return;
         window.fbSetDoc(window.fbDoc(window.fbDb, "users", state.user.uid), {
           mySubjects: state.mySubjects,
-          attendance: state.attendance
+          attendance: state.attendance,
+          seats: state.seats
         }, { merge: true }).catch(console.error);
       }
       function isAbsent(lid) { return !!state.attendance[lid]; }
@@ -1177,11 +1215,13 @@
         if (!ev) return '<div class="board-card' + (isNow ? ' now' : '') + '"><div class="board-label">' + lbl + '</div><div class="board-empty">' + (isNow ? 'No class right now' : 'Nothing else today') + '</div></div>';
         var col = colorFor(ev.subject);
         var meta = isNow ? fmt(ev.start) + ' – ' + fmt(ev.end) : fmt(ev.start) + ' · ' + until(ev.start);
+        var seat = state.seats[ev.key];
+        var seatHtml = seat ? '<span class="seat-badge">🪑 ' + esc(seat) + '</span>' : '';
         return '<div class="board-card' + (isNow ? ' now' : '') + '">' +
           '<div class="board-pill" style="background:' + col + '"></div>' +
           '<div class="board-label">' + lbl + '</div>' +
           '<div class="board-code">' + esc(ev.subject) + (ev.section ? '-' + ev.section : '') + '</div>' +
-          '<div class="board-room">' + esc(ev.room) + '</div>' +
+          '<div class="board-room"><span>' + esc(ev.room) + '</span>' + seatHtml + '</div>' +
           '<div class="board-meta">' + meta + '</div></div>';
       }
 
@@ -1196,11 +1236,13 @@
           var body = !evs.length ? '<div class="empty-day">No classes for your subjects</div>' : evs.map(function (e) {
             if (e.type === 'info') return '<div class="slot-row"><div class="slot-time">' + esc(e.slotHeader) + '</div><div class="slot-main"><div class="info-line">' + esc(e.text) + '</div></div></div>';
             var col = colorFor(e.subject), ab = isAbsent(e.lectureId), lid = e.lectureId.replace(/"/g, '');
+            var seat = state.seats[e.key];
+            var seatHtml = seat ? '<span class="seat-badge" style="margin-left:6px;">🪑 ' + esc(seat) + '</span>' : '';
             return '<div class="slot-row' + (ab ? ' absent-row' : '') + '">' +
               '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
               '<div class="slot-main">' +
               '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
-              '<div><span class="room-chip">' + esc(e.room) + '</span></div>' +
+              '<div style="display:flex;align-items:center;"><span class="room-chip">' + esc(e.room) + '</span>' + seatHtml + '</div>' +
               '</div>' +
               '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>' +
               '</div>';
@@ -1384,12 +1426,22 @@
           if (!items.length) { el.innerHTML = '<div style="padding:10px;color:var(--text-dim)">No matches</div>'; return; }
           el.innerHTML = items.map(function (k) {
             var p = k.split('-'), sub = p[0], sec = p[1] || '', col = colorFor(sub), chk = selected.indexOf(k) !== -1 ? 'checked' : '';
-            return '<label><input type="checkbox" value="' + k + '" ' + chk + '><span class="chip-dot" style="background:' + col + '"></span><span class="chip-sub">' + esc(sub) + '</span>' + (sec ? '<span class="chip-sec">Section ' + esc(sec) + '</span>' : '<span class="chip-sec">(no section)</span>') + '</label>';
+            var seat = state.seats[k] || '';
+            var seatInput = '<input type="number" class="seat-input ' + (chk ? '' : 'hidden') + '" data-key="' + k + '" placeholder="Seat" value="' + esc(seat) + '">';
+            return '<div class="chip-item"><label><input type="checkbox" value="' + k + '" ' + chk + '><span class="chip-dot" style="background:' + col + '"></span><span class="chip-sub">' + esc(sub) + '</span>' + (sec ? '<span class="chip-sec">Section ' + esc(sec) + '</span>' : '<span class="chip-sec">(no section)</span>') + '</label>' + seatInput + '</div>';
           }).join('');
-          el.querySelectorAll('input').forEach(function (cb) {
+          el.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
             cb.onchange = function () {
               if (cb.checked) { if (selected.indexOf(cb.value) === -1) selected.push(cb.value); }
               else selected = selected.filter(function (s) { return s !== cb.value; });
+              var si = cb.closest('.chip-item').querySelector('.seat-input');
+              if (si) si.className = 'seat-input ' + (cb.checked ? '' : 'hidden');
+            };
+          });
+          el.querySelectorAll('.seat-input').forEach(function(si) {
+            si.oninput = function() {
+              if (si.value) state.seats[si.getAttribute('data-key')] = si.value;
+              else delete state.seats[si.getAttribute('data-key')];
             };
           });
         }
@@ -1398,7 +1450,7 @@
         document.getElementById('selAll').onclick = function () { selected = keys.slice(); draw(document.getElementById('pkrSearch').value); };
         document.getElementById('clrAll').onclick = function () { selected = []; draw(document.getElementById('pkrSearch').value); };
         document.getElementById('closePkr').onclick = function () { ov.remove(); };
-        document.getElementById('saveSub').onclick = function () { state.mySubjects = selected; setLocal('my-subjects', selected); syncToFirebase(); ov.remove(); render(); };
+        document.getElementById('saveSub').onclick = function () { state.mySubjects = selected; setLocal('my-subjects', selected); setLocal('seats', state.seats); syncToFirebase(); ov.remove(); render(); };
       }
 
       // ── Install ─────────────────────────────────────────────────
@@ -1422,6 +1474,7 @@
         var dm = getLocal('dark-mode'); if (dm) applyTheme(true);
         var sub = getLocal('my-subjects'); if (sub) state.mySubjects = sub;
         var att = getLocal('attendance'); if (att) state.attendance = att;
+        var sts = getLocal('seats'); if (sts) state.seats = sts;
         var cached = getLocal('cached-timetable');
         if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
         
@@ -1439,6 +1492,7 @@
                 var d = docSnap.data();
                 if (d.mySubjects) { state.mySubjects = d.mySubjects; setLocal('my-subjects', d.mySubjects); }
                 if (d.attendance) { state.attendance = Object.assign({}, state.attendance, d.attendance); setLocal('attendance', state.attendance); }
+                if (d.seats) { state.seats = Object.assign({}, state.seats, d.seats); setLocal('seats', state.seats); }
               }
               render();
             }).catch(console.error);
