@@ -1479,6 +1479,16 @@
 
       // ── Init ────────────────────────────────────────────────────
       function init() {
+        if (window.location.hostname.indexOf('netlify.app') !== -1) {
+          ROOT.innerHTML = '<div style="padding: 40px 20px; text-align: center; font-family: Inter, sans-serif; line-height: 1.6; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">' +
+            '<div style="font-size:48px; margin-bottom:16px;">🚀</div>' +
+            '<h2 style="margin:0 0 12px; font-size:24px;">We have moved!</h2>' +
+            '<p style="color:var(--text-dim); margin:0 0 32px;">Due to high usage, we have migrated to a faster platform.<br>Please update your bookmarks and install the new app.</p>' +
+            '<a href="https://iimn-tt.pages.dev/" style="display:inline-block; padding:14px 28px; background:var(--accent); color:#1c1f24; text-decoration:none; border-radius:8px; font-weight:700; font-size:16px;">Go to New Timetable</a>' +
+            '</div>';
+          return;
+        }
+
         var dm = getLocal('dark-mode'); if (dm) applyTheme(true);
         var sub = getLocal('my-subjects'); if (sub) state.mySubjects = sub;
         var att = getLocal('attendance'); if (att) state.attendance = att;
