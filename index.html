@@ -992,6 +992,13 @@
     window.fbArrayRemove = arrayRemove;
     window.fbOnSnapshot = onSnapshot;
 
+    window.navTo = function(p) {
+      if (typeof currentPage !== 'undefined' && typeof render === 'function') {
+        currentPage = p;
+        render();
+      }
+    };
+
     (function () {
       var ROOT = document.getElementById('root');
       var currentPage = 'timetable'; // 'timetable' | 'attendance' | 'calendar'
@@ -1329,7 +1336,7 @@
           '<h3>My Friends</h3>' + friendsHtml +
           '<hr style="margin:24px 0;opacity:0.2;">' +
           '<h3>My Groups</h3>' +
-          '<button class="btn" style="width:100%;margin-bottom:16px;" onclick="currentPage=\'create_group\'; render();">Create New Group</button>' +
+          '<button class="btn" style="width:100%;margin-bottom:16px;" onclick="navTo(\'create_group\')">Create New Group</button>' +
           groupsHtml +
           '</div>' + navHtml();
         bindHdr(); bindNav();
@@ -1350,7 +1357,7 @@
 
         ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' +
           '<div style="padding: 16px; padding-bottom: 90px; max-width: 800px; margin: 0 auto;">' +
-          '<button class="btn" style="margin-bottom:16px;" onclick="currentPage=\'social\'; render();">← Back to Social</button>' +
+          '<button class="btn" style="margin-bottom:16px;" onclick="navTo(\'social\')">← Back to Social</button>' +
           '<h2>Create New Group</h2>' +
           '<div style="margin-bottom:16px;">' +
           '<label style="display:block;margin-bottom:8px;font-weight:600;">Group Name</label>' +
