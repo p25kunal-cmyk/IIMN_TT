@@ -956,7 +956,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADOXv5tMuN_jw8iuWOp8sJ0diGYn-KwQE",
@@ -983,6 +983,13 @@
     window.fbDoc = doc;
     window.fbGetDoc = getDoc;
     window.fbSetDoc = setDoc;
+    window.fbCollection = collection;
+    window.fbQuery = query;
+    window.fbWhere = where;
+    window.fbGetDocs = getDocs;
+    window.fbUpdateDoc = updateDoc;
+    window.fbArrayUnion = arrayUnion;
+    window.fbArrayRemove = arrayRemove;
 
     (function () {
       var ROOT = document.getElementById('root');
@@ -1006,7 +1013,7 @@
         return null;
       }
 
-      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false };
+      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false, shareId: null, friends: [], requests: [], groups: [], displayName: '', email: '' };
       function getLocal(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
       function setLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
       
@@ -1015,7 +1022,10 @@
         window.fbSetDoc(window.fbDoc(window.fbDb, "users", state.user.uid), {
           mySubjects: state.mySubjects,
           attendance: state.attendance,
-          seats: state.seats
+          seats: state.seats,
+          shareId: state.shareId,
+          displayName: state.displayName,
+          email: state.email
         }, { merge: true }).catch(console.error);
       }
       function isAbsent(lid) { return !!state.attendance[lid]; }
@@ -1132,6 +1142,7 @@
         if (!state.data) return renderLoading();
         if (currentPage === 'attendance') return renderAttendance();
         if (currentPage === 'calendar') return renderCalendar();
+        if (currentPage === 'social') return renderSocial();
         renderTimetable();
       }
 
@@ -1155,11 +1166,12 @@
       }
 
       function navHtml() {
-        var isT = currentPage === 'timetable', isA = currentPage === 'attendance', isC = currentPage === 'calendar';
+        var isT = currentPage === 'timetable', isA = currentPage === 'attendance', isC = currentPage === 'calendar', isS = currentPage === 'social';
         return '<div class="bottom-nav">' +
           '<button class="nav-btn' + (isT ? ' active' : '') + '" id="navTT"><span class="nav-icon">🗓</span>Timetable</button>' +
           '<button class="nav-btn' + (isC ? ' active' : '') + '" id="navCal"><span class="nav-icon">📅</span>Calendar</button>' +
           '<button class="nav-btn' + (isA ? ' active' : '') + '" id="navAT"><span class="nav-icon">📊</span>Attendance</button>' +
+          '<button class="nav-btn' + (isS ? ' active' : '') + '" id="navSoc"><span class="nav-icon">👥</span>Social</button>' +
           '</div>';
       }
 
@@ -1188,11 +1200,130 @@
         };
       }
       function bindNav() {
-        var t = document.getElementById('navTT'), c = document.getElementById('navCal'), a = document.getElementById('navAT');
+        var t = document.getElementById('navTT'), c = document.getElementById('navCal'), a = document.getElementById('navAT'), s = document.getElementById('navSoc');
         if (t) t.onclick = function () { currentPage = 'timetable'; render(); };
         if (c) c.onclick = function () { currentPage = 'calendar'; render(); };
         if (a) a.onclick = function () { currentPage = 'attendance'; render(); };
+        if (s) s.onclick = function () { currentPage = 'social'; render(); };
       }
+
+      // ── Social page ─────────────────────────────────────────────
+      function renderSocial() {
+        var reqHtml = '';
+        if (state.requests && state.requests.length > 0) {
+          reqHtml = '<div class="req-box" style="margin-bottom: 20px;">' +
+            '<h4>Friend Requests (' + state.requests.length + ')</h4>' +
+            state.requests.map(function(reqId) {
+              return '<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface);padding:8px 12px;border-radius:6px;margin-bottom:8px;">' +
+                '<span>ID: <b>' + esc(reqId) + '</b></span>' +
+                '<div>' +
+                '<button class="btn" style="padding:4px 8px;margin-right:8px;background:var(--primary);color:#fff;" onclick="acceptFriend(\'' + esc(reqId) + '\')">Accept</button>' +
+                '<button class="btn" style="padding:4px 8px;" onclick="declineFriend(\'' + esc(reqId) + '\')">Decline</button>' +
+                '</div></div>';
+            }).join('') +
+          '</div>';
+        }
+
+        var friendsHtml = '<div class="empty-state">No friends yet. Add some!</div>';
+        if (state.friends && state.friends.length > 0) {
+          friendsHtml = state.friends.map(function(fId) {
+            return '<div style="background:var(--surface);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:18px;">Friend ID: <b>' + esc(fId) + '</b></div>';
+          }).join('');
+        }
+
+        var addFriendHtml = '<div style="display:flex;gap:8px;margin-bottom: 24px;">' +
+          '<input type="text" id="addFriendInput" class="input" placeholder="Enter 6-character Share ID" style="flex:1;">' +
+          '<button class="btn" onclick="sendFriendRequest()" id="addFriendBtn">Add Friend</button>' +
+          '</div>';
+
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' + 
+          '<div class="social-page" style="padding: 16px; padding-bottom: 90px; max-width: 800px; margin: 0 auto;">' +
+          '<h2>Social & Friends</h2>' +
+          '<div style="background:var(--primary);color:#fff;padding:12px;border-radius:8px;margin-bottom:24px;text-align:center;">' +
+          'Your Shareable ID<br><b style="font-size:24px;letter-spacing:2px;">' + (state.shareId || '...') + '</b>' +
+          '</div>' +
+          '<h3>Add a Friend</h3>' + addFriendHtml +
+          reqHtml +
+          '<h3>My Friends</h3>' + friendsHtml +
+          '<hr style="margin:24px 0;opacity:0.2;">' +
+          '<h3>My Groups</h3>' +
+          '<button class="btn" style="width:100%;margin-bottom:16px;">Create New Group</button>' +
+          '<div class="empty-state">You are not in any groups.</div>' +
+          '</div>' + navHtml();
+        bindHdr(); bindNav();
+      }
+
+      window.sendFriendRequest = function() {
+        var input = document.getElementById('addFriendInput'), btn = document.getElementById('addFriendBtn');
+        if (!input) return;
+        var targetId = input.value.trim().toUpperCase();
+        if (!targetId || targetId.length < 6) return alert('Invalid ID');
+        if (targetId === state.shareId) return alert('You cannot add yourself!');
+        if (state.friends && state.friends.includes(targetId)) return alert('Already friends!');
+        
+        btn.innerHTML = 'Sending...';
+        btn.disabled = true;
+
+        var q = window.fbQuery(window.fbCollection(window.fbDb, "users"), window.fbWhere("shareId", "==", targetId));
+        window.fbGetDocs(q).then(function(snapshot) {
+          if (snapshot.empty) {
+            alert('User not found. Check the ID.');
+            btn.innerHTML = 'Add Friend'; btn.disabled = false;
+            return;
+          }
+          var targetRef = snapshot.docs[0].ref;
+          
+          window.fbUpdateDoc(targetRef, {
+            requests: window.fbArrayUnion(state.shareId)
+          }).then(function() {
+            alert('Friend request sent!');
+            input.value = ''; btn.innerHTML = 'Add Friend'; btn.disabled = false;
+          }).catch(function(err) {
+            console.error(err);
+            alert('Failed to send request.');
+            btn.innerHTML = 'Add Friend'; btn.disabled = false;
+          });
+        }).catch(function(err) {
+          console.error(err);
+          alert('Error searching for user.');
+          btn.innerHTML = 'Add Friend'; btn.disabled = false;
+        });
+      };
+
+      window.acceptFriend = function(reqId) {
+        if (!confirm('Accept request from ' + reqId + '?')) return;
+        var myRef = window.fbDoc(window.fbDb, "users", state.user.uid);
+        
+        var q = window.fbQuery(window.fbCollection(window.fbDb, "users"), window.fbWhere("shareId", "==", reqId));
+        window.fbGetDocs(q).then(function(snapshot) {
+          if (snapshot.empty) return alert('Requester no longer exists.');
+          var requesterRef = snapshot.docs[0].ref;
+          
+          window.fbUpdateDoc(myRef, {
+            friends: window.fbArrayUnion(reqId),
+            requests: window.fbArrayRemove(reqId)
+          }).then(function() {
+            return window.fbUpdateDoc(requesterRef, {
+              friends: window.fbArrayUnion(state.shareId)
+            });
+          }).then(function() {
+            if (!state.friends) state.friends = [];
+            state.friends.push(reqId);
+            state.requests = state.requests.filter(function(r) { return r !== reqId; });
+            render();
+          });
+        });
+      };
+
+      window.declineFriend = function(reqId) {
+        var myRef = window.fbDoc(window.fbDb, "users", state.user.uid);
+        window.fbUpdateDoc(myRef, {
+          requests: window.fbArrayRemove(reqId)
+        }).then(function() {
+          state.requests = state.requests.filter(function(r) { return r !== reqId; });
+          render();
+        });
+      };
 
       // ── Timetable page ──────────────────────────────────────────
       function renderTimetable() {
@@ -1498,17 +1629,28 @@
               return;
             }
             state.user = user;
+            state.displayName = user.displayName || 'Anonymous';
+            state.email = user.email || '';
             window.fbGetDoc(window.fbDoc(window.fbDb, "users", user.uid)).then(function(docSnap) {
+              var needSync = false;
               if (docSnap.exists()) {
                 var d = docSnap.data();
                 if (d.mySubjects) { state.mySubjects = d.mySubjects; setLocal('my-subjects', d.mySubjects); }
                 if (d.attendance) { state.attendance = Object.assign({}, state.attendance, d.attendance); setLocal('attendance', state.attendance); }
                 if (d.seats) { state.seats = Object.assign({}, state.seats, d.seats); setLocal('seats', state.seats); }
+                if (d.shareId) { state.shareId = d.shareId; } else { state.shareId = Math.random().toString(36).substring(2, 8).toUpperCase(); needSync = true; }
+                if (d.friends) { state.friends = d.friends; }
+                if (d.requests) { state.requests = d.requests; }
+              } else {
+                state.shareId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                needSync = true;
               }
+              if (needSync) syncToFirebase();
               render();
             }).catch(console.error);
           } else {
             state.user = null;
+            state.shareId = null;
           }
           render();
         });
