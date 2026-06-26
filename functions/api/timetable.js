@@ -1,5 +1,5 @@
 export async function onRequest(context) {
-  const EXEC_URL = 'https://script.google.com/a/macros/iimnagpur.ac.in/s/AKfycbxBxonDpBgnWDV-vChOuysOLA8WgjE0dZ6Fpl1FAPE9ju3WldBRdqWnXlqDQf2a4_Y31A/exec?action=data';
+  const EXEC_URL = 'https://script.google.com/macros/s/AKfycbynFmcsk5S2ImeQEphSdfsonAHpeMrh1MtXOqP7D72DLOJGLPKMPz_XvAxCkfJEQtsgMQ/exec';
 
   const headers = new Headers({
     'Access-Control-Allow-Origin': '*',

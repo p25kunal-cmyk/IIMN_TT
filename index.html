@@ -996,11 +996,13 @@
 
       function parseLine(line) {
         if (!line || typeof line !== 'string') return null;
-        var c = line.trim().replace(/\s+/g, ''); if (!c) return null;
+        var isCancelled = /cancel/i.test(line) || /[\u0336\u0335]/.test(line);
+        var c = line.replace(/[\u0336\u0335]/g, '').replace(/\(?cancelled\)?/ig, '').trim().replace(/\s+/g, '');
+        if (!c) return null;
         var m = c.match(/^([A-Z]+)-([A-Z])\/(\d+)\/(.+)$/i);
-        if (m) return { key: (m[1] + '-' + m[2]).toUpperCase(), subject: m[1].toUpperCase(), section: m[2].toUpperCase(), week: m[3], room: m[4] };
+        if (m) return { key: (m[1] + '-' + m[2]).toUpperCase(), subject: m[1].toUpperCase(), section: m[2].toUpperCase(), week: m[3], room: m[4], cancelled: isCancelled };
         var m2 = c.match(/^([A-Z]+)\/(\d+)\/(.+)$/i);
-        if (m2) return { key: m2[1].toUpperCase(), subject: m2[1].toUpperCase(), section: '', week: m2[2], room: m2[3] };
+        if (m2) return { key: m2[1].toUpperCase(), subject: m2[1].toUpperCase(), section: '', week: m2[2], room: m2[3], cancelled: isCancelled };
         return null;
       }
 
@@ -1079,6 +1081,7 @@
                 type: 'class', date: row.date, day: row.day, slotIndex: idx, slotHeader: sh,
                 subject: p.subject, section: p.section, room: p.room, key: p.key, week: p.week,
                 lectureId: p.key + ':' + p.week,
+                cancelled: p.cancelled,
                 start: range ? dtr(row.date, range.start) : null, end: range ? dtr(row.date, range.end) : null
               });
             });
@@ -1219,14 +1222,14 @@
       function bCard(ev, isNow) {
         var lbl = isNow ? 'NOW' : 'NEXT';
         if (!ev) return '<div class="board-card' + (isNow ? ' now' : '') + '"><div class="board-label">' + lbl + '</div><div class="board-empty">' + (isNow ? 'No class right now' : 'Nothing else today') + '</div></div>';
-        var col = colorFor(ev.subject);
+        var col = ev.cancelled ? 'var(--danger)' : colorFor(ev.subject);
         var meta = isNow ? fmt(ev.start) + ' – ' + fmt(ev.end) : fmt(ev.start) + ' · ' + until(ev.start);
         var seat = state.seats[ev.key];
         var seatHtml = seat ? '<span class="seat-badge">🪑 ' + esc(seat) + '</span>' : '';
         return '<div class="board-card' + (isNow ? ' now' : '') + '">' +
           '<div class="board-pill" style="background:' + col + '"></div>' +
           '<div class="board-label">' + lbl + '</div>' +
-          '<div class="board-code">' + esc(ev.subject) + (ev.section ? '-' + ev.section : '') + '</div>' +
+          '<div class="board-code">' + (ev.cancelled ? '<span style="color:var(--danger);font-size:14px;">CANCELLED </span><br>' : '') + esc(ev.subject) + (ev.section ? '-' + ev.section : '') + '</div>' +
           '<div class="board-room"><span>' + esc(ev.room) + '</span>' + seatHtml + '</div>' +
           '<div class="board-meta">' + meta + '</div></div>';
       }
@@ -1241,13 +1244,13 @@
           var isToday = date === td;
           var body = !evs.length ? '<div class="empty-day">No classes for your subjects</div>' : evs.map(function (e) {
             if (e.type === 'info') return '<div class="slot-row"><div class="slot-time">' + esc(e.slotHeader) + '</div><div class="slot-main"><div class="info-line">' + esc(e.text) + '</div></div></div>';
-            var col = colorFor(e.subject), ab = isAbsent(e.lectureId), lid = e.lectureId.replace(/"/g, '');
+            var col = e.cancelled ? 'var(--danger)' : colorFor(e.subject), ab = isAbsent(e.lectureId), lid = e.lectureId.replace(/"/g, '');
             var seat = state.seats[e.key];
             var seatHtml = seat ? '<span class="seat-badge" style="margin-left:6px;">🪑 ' + esc(seat) + '</span>' : '';
             return '<div class="slot-row' + (ab ? ' absent-row' : '') + '">' +
               '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
               '<div class="slot-main">' +
-              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
+              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + (e.cancelled ? 'CANCELLED ' : '') + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
               '<div style="display:flex;align-items:center;"><span class="room-chip">' + esc(e.room) + '</span>' + seatHtml + '</div>' +
               '</div>' +
               '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>' +
@@ -1310,11 +1313,11 @@
             ? '<div class="empty-day">No classes for your subjects</div>'
             : dayEvents.map(function (e) {
               if (e.type === 'info') return '<div class="slot-row"><div class="slot-time">' + esc(e.slotHeader) + '</div><div class="slot-main"><div class="info-line">' + esc(e.text) + '</div></div></div>';
-              var col = colorFor(e.subject);
+              var col = e.cancelled ? 'var(--danger)' : colorFor(e.subject);
               return '<div class="slot-row">' +
                 '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
                 '<div class="slot-main">' +
-                '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
+                '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + (e.cancelled ? 'CANCELLED ' : '') + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
                 '<div><span class="room-chip">' + esc(e.room) + '</span></div>' +
                 '</div></div>';
             }).join('');
