@@ -1642,6 +1642,7 @@
                 if (d.shareId) { state.shareId = d.shareId; } else { state.shareId = Math.random().toString(36).substring(2, 8).toUpperCase(); needSync = true; }
                 if (d.friends) { state.friends = d.friends; }
                 if (d.requests) { state.requests = d.requests; }
+                console.log('Firebase snapshot received:', d);
               } else {
                 state.shareId = Math.random().toString(36).substring(2, 8).toUpperCase();
                 needSync = true;
