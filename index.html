@@ -1229,7 +1229,7 @@
         return '<div class="board-card' + (isNow ? ' now' : '') + '">' +
           '<div class="board-pill" style="background:' + col + '"></div>' +
           '<div class="board-label">' + lbl + '</div>' +
-          '<div class="board-code">' + (ev.cancelled ? '<span style="color:var(--danger);font-size:14px;">CANCELLED </span><br>' : '') + esc(ev.subject) + (ev.section ? '-' + ev.section : '') + '</div>' +
+          '<div class="board-code">' + esc(ev.subject) + (ev.section ? '-' + ev.section : '') + (ev.cancelled ? '<br><span style="color:var(--danger);font-size:14px;">(CANCELLED)</span>' : '') + '</div>' +
           '<div class="board-room"><span>' + esc(ev.room) + '</span>' + seatHtml + '</div>' +
           '<div class="board-meta">' + meta + '</div></div>';
       }
@@ -1250,10 +1250,10 @@
             return '<div class="slot-row' + (ab ? ' absent-row' : '') + '">' +
               '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
               '<div class="slot-main">' +
-              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + (e.cancelled ? 'CANCELLED ' : '') + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
+              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + (e.cancelled ? ' (CANCELLED)' : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
               '<div style="display:flex;align-items:center;"><span class="room-chip">' + esc(e.room) + '</span>' + seatHtml + '</div>' +
               '</div>' +
-              '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>' +
+              (e.cancelled ? '' : '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>') +
               '</div>';
           }).join('');
           return '<div class="day-card' + (isToday ? ' today' : '') + '" data-date="' + esc(date) + '">' +
@@ -1317,7 +1317,7 @@
               return '<div class="slot-row">' +
                 '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
                 '<div class="slot-main">' +
-                '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + (e.cancelled ? 'CANCELLED ' : '') + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
+                '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + (e.cancelled ? ' (CANCELLED)' : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
                 '<div><span class="room-chip">' + esc(e.room) + '</span></div>' +
                 '</div></div>';
             }).join('');
