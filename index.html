@@ -1366,7 +1366,7 @@
       window.createGroupSubmit = function() {
         var nameInput = document.getElementById('newGroupName');
         var name = nameInput ? nameInput.value.trim() : '';
-        if (!name) return console.log('Please enter a group name');
+        if (!name) return alert('Please enter a group name');
         
         var selected = [];
         state.friends.forEach(function(fId) {
@@ -1374,7 +1374,7 @@
           if (chk && chk.checked) selected.push(fId);
         });
         
-        if (selected.length === 0) return console.log('Please select at least one friend');
+        if (selected.length === 0) return alert('Please select at least one friend');
         
         selected.push(state.shareId); // Add self
         
