@@ -1282,7 +1282,10 @@
             }
             
             return '<div style="background:var(--surface);padding:12px;border-radius:6px;margin-bottom:8px;">' +
-                   '<div style="font-size:18px;font-weight:600;margin-bottom:4px;">' + esc(fd.displayName || 'Unknown') + ' <span style="font-size:12px;color:var(--sub);font-weight:normal;">#' + esc(fId) + '</span></div>' +
+                   '<div style="font-size:18px;font-weight:600;margin-bottom:4px;display:flex;justify-content:space-between;">' + 
+                     '<span>' + esc(fd.displayName || 'Unknown') + ' <span style="font-size:12px;color:var(--sub);font-weight:normal;">#' + esc(fId) + '</span></span>' +
+                     '<button class="btn" style="padding:2px 6px;font-size:12px;background:transparent;color:var(--danger);" onclick="removeFriend(\'' + esc(fId) + '\')">✕</button>' +
+                   '</div>' +
                    '<div style="font-size:14px;">' + statusStr + '</div>' +
                    '</div>';
            }).join('');
@@ -1312,7 +1315,10 @@
             }).join('');
             
             return '<div style="background:var(--surface);padding:12px;border-radius:6px;margin-bottom:12px;">' +
-                   '<div style="font-size:18px;font-weight:600;margin-bottom:8px;">' + esc(g.name) + '</div>' +
+                   '<div style="font-size:18px;font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;">' +
+                     '<span>' + esc(g.name) + '</span>' +
+                     '<button class="btn" style="padding:2px 6px;font-size:12px;background:transparent;color:var(--danger);" onclick="leaveGroup(\'' + esc(gId) + '\')">Leave</button>' +
+                   '</div>' +
                    membersHtml +
                    '</div>';
           }).join('');
@@ -1439,6 +1445,36 @@
           console.error('Error searching for user.', err);
           btn.innerHTML = 'Add Friend'; btn.disabled = false;
         });
+      };
+
+      window.removeFriend = function(fId) {
+        if (!confirm('Remove friend ' + fId + '?')) return;
+        var myRef = window.fbDoc(window.fbDb, "users", state.user.uid);
+        window.fbUpdateDoc(myRef, {
+          friends: window.fbArrayRemove(fId)
+        }).then(function() {
+          var q = window.fbQuery(window.fbCollection(window.fbDb, "users"), window.fbWhere("shareId", "==", fId));
+          window.fbGetDocs(q).then(function(snapshot) {
+            if (!snapshot.empty) {
+              window.fbUpdateDoc(snapshot.docs[0].ref, {
+                friends: window.fbArrayRemove(state.shareId)
+              }).catch(function(){});
+            }
+          });
+        }).catch(console.error);
+      };
+
+      window.leaveGroup = function(gId) {
+        if (!confirm('Leave this group?')) return;
+        var myRef = window.fbDoc(window.fbDb, "users", state.user.uid);
+        window.fbUpdateDoc(myRef, {
+          groups: window.fbArrayRemove(gId)
+        }).then(function() {
+          var groupRef = window.fbDoc(window.fbDb, "groups", gId);
+          window.fbUpdateDoc(groupRef, {
+            members: window.fbArrayRemove(state.shareId)
+          }).catch(function(){});
+        }).catch(console.error);
       };
 
       window.acceptFriend = function(reqId) {
