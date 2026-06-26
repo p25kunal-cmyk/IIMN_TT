@@ -1258,9 +1258,9 @@
         var input = document.getElementById('addFriendInput'), btn = document.getElementById('addFriendBtn');
         if (!input) return;
         var targetId = input.value.trim().toUpperCase();
-        if (!targetId || targetId.length < 6) return alert('Invalid ID');
-        if (targetId === state.shareId) return alert('You cannot add yourself!');
-        if (state.friends && state.friends.includes(targetId)) return alert('Already friends!');
+        if (!targetId || targetId.length < 6) return console.log('Invalid ID');
+        if (targetId === state.shareId) return console.log('You cannot add yourself!');
+        if (state.friends && state.friends.includes(targetId)) return console.log('Already friends!');
         
         btn.innerHTML = 'Sending...';
         btn.disabled = true;
@@ -1268,7 +1268,7 @@
         var q = window.fbQuery(window.fbCollection(window.fbDb, "users"), window.fbWhere("shareId", "==", targetId));
         window.fbGetDocs(q).then(function(snapshot) {
           if (snapshot.empty) {
-            alert('User not found. Check the ID.');
+            console.log('User not found. Check the ID.');
             btn.innerHTML = 'Add Friend'; btn.disabled = false;
             return;
           }
@@ -1277,27 +1277,25 @@
           window.fbUpdateDoc(targetRef, {
             requests: window.fbArrayUnion(state.shareId)
           }).then(function() {
-            alert('Friend request sent!');
+            console.log('Friend request sent!');
             input.value = ''; btn.innerHTML = 'Add Friend'; btn.disabled = false;
           }).catch(function(err) {
-            console.error(err);
-            alert('Failed to send request.');
+            console.error('Failed to send request.', err);
             btn.innerHTML = 'Add Friend'; btn.disabled = false;
           });
         }).catch(function(err) {
-          console.error(err);
-          alert('Error searching for user.');
+          console.error('Error searching for user.', err);
           btn.innerHTML = 'Add Friend'; btn.disabled = false;
         });
       };
 
       window.acceptFriend = function(reqId) {
-        if (!confirm('Accept request from ' + reqId + '?')) return;
+        console.log('Accepting request from', reqId);
         var myRef = window.fbDoc(window.fbDb, "users", state.user.uid);
         
         var q = window.fbQuery(window.fbCollection(window.fbDb, "users"), window.fbWhere("shareId", "==", reqId));
         window.fbGetDocs(q).then(function(snapshot) {
-          if (snapshot.empty) return alert('Requester no longer exists.');
+          if (snapshot.empty) return console.log('Requester no longer exists.');
           var requesterRef = snapshot.docs[0].ref;
           
           window.fbUpdateDoc(myRef, {
