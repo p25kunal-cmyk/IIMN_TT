@@ -1014,7 +1014,39 @@
         return null;
       }
 
-      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false, shareId: null, friends: [], requests: [], groups: [], displayName: '', email: '' };
+      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false, shareId: null, friends: [], requests: [], groups: [], displayName: '', email: '', friendData: {} };
+
+      function fetchFriendsData() {
+        if (!state.friends || state.friends.length === 0) return;
+        var q = window.fbQuery(window.fbCollection(window.fbDb, "users"), window.fbWhere("shareId", "in", state.friends));
+        window.fbGetDocs(q).then(function(snapshot) {
+          snapshot.forEach(function(doc) {
+            var d = doc.data();
+            state.friendData[d.shareId] = {
+              displayName: d.displayName,
+              mySubjects: d.mySubjects || []
+            };
+          });
+          if (currentPage === 'social') render();
+        }).catch(function(err) {
+          console.error('Failed to fetch friend data', err);
+        });
+      }
+
+      function fetchGroupsData() {
+        if (!state.groups || state.groups.length === 0) return;
+        var q = window.fbQuery(window.fbCollection(window.fbDb, "groups"), window.fbWhere("id", "in", state.groups));
+        window.fbGetDocs(q).then(function(snapshot) {
+          state.groupData = {};
+          snapshot.forEach(function(doc) {
+            var d = doc.data();
+            state.groupData[d.id] = d;
+          });
+          if (currentPage === 'social') render();
+        }).catch(function(err) {
+          console.error('Failed to fetch group data', err);
+        });
+      }
       function getLocal(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
       function setLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
       
@@ -1068,9 +1100,9 @@
       }
 
       // ── Events ─────────────────────────────────────────────────
-      function buildEvents() {
+      function buildEvents(subjects) {
         if (!state.data) return [];
-        var mySet = {}; state.mySubjects.forEach(function (k) { mySet[k] = true; });
+        var mySet = {}; (subjects || state.mySubjects).forEach(function (k) { mySet[k] = true; });
         var events = [];
         state.data.rows.forEach(function (row) {
           row.cells.forEach(function (cell, idx) {
@@ -1143,6 +1175,7 @@
         if (!state.data) return renderLoading();
         if (currentPage === 'attendance') return renderAttendance();
         if (currentPage === 'calendar') return renderCalendar();
+        if (currentPage === 'create_group') return renderCreateGroup();
         if (currentPage === 'social') return renderSocial();
         renderTimetable();
       }
@@ -1228,7 +1261,55 @@
         var friendsHtml = '<div class="empty-state">No friends yet. Add some!</div>';
         if (state.friends && state.friends.length > 0) {
           friendsHtml = state.friends.map(function(fId) {
-            return '<div style="background:var(--surface);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:18px;">Friend ID: <b>' + esc(fId) + '</b></div>';
+            var fd = state.friendData[fId];
+            if (!fd) return '<div style="background:var(--surface);padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:16px;">Loading ' + esc(fId) + '...</div>';
+            
+            var evts = buildEvents(fd.mySubjects);
+            var nn = getNowNext(evts);
+            
+            var statusStr = '';
+            if (nn.now) {
+              statusStr = '<span style="color:var(--danger)">🔴 In Class (' + esc(nn.now.subject) + ' in ' + esc(nn.now.room) + ')</span>';
+            } else if (nn.next) {
+              statusStr = '<span style="color:var(--good)">🟢 Free (Next: ' + esc(nn.next.subject) + ' at ' + esc(nn.next.slotHeader) + ')</span>';
+            } else {
+              statusStr = '<span style="color:var(--good)">🟢 Free (No more classes today)</span>';
+            }
+            
+            return '<div style="background:var(--surface);padding:12px;border-radius:6px;margin-bottom:8px;">' +
+                   '<div style="font-size:18px;font-weight:600;margin-bottom:4px;">' + esc(fd.displayName || 'Unknown') + ' <span style="font-size:12px;color:var(--sub);font-weight:normal;">#' + esc(fId) + '</span></div>' +
+                   '<div style="font-size:14px;">' + statusStr + '</div>' +
+                   '</div>';
+           }).join('');
+        }
+        
+        var groupsHtml = '<div class="empty-state">You are not in any groups.</div>';
+        if (state.groups && state.groups.length > 0 && state.groupData) {
+          groupsHtml = state.groups.map(function(gId) {
+            var g = state.groupData[gId];
+            if (!g) return '<div style="background:var(--surface);padding:12px;border-radius:6px;margin-bottom:8px;">Loading ' + esc(gId) + '...</div>';
+            
+            var membersHtml = g.members.map(function(mId) {
+              var fd = mId === state.shareId ? { displayName: state.displayName + ' (You)', mySubjects: state.mySubjects } : (state.friendData[mId] || {});
+              var name = fd.displayName || mId;
+              
+              var evts = buildEvents(fd.mySubjects || []);
+              var nn = getNowNext(evts);
+              
+              var sStr = '🟢 Free';
+              if (nn.now) sStr = '🔴 ' + esc(nn.now.subject) + ' in ' + esc(nn.now.room);
+              else if (nn.next) sStr = '🟢 Free (Next: ' + esc(nn.next.subject) + ' at ' + esc(nn.next.slotHeader) + ')';
+              
+              return '<div style="display:flex;justify-content:space-between;font-size:14px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">' +
+                     '<span>' + esc(name) + '</span>' +
+                     '<span style="' + (nn.now ? 'color:var(--danger)' : 'color:var(--good)') + '">' + sStr + '</span>' +
+                     '</div>';
+            }).join('');
+            
+            return '<div style="background:var(--surface);padding:12px;border-radius:6px;margin-bottom:12px;">' +
+                   '<div style="font-size:18px;font-weight:600;margin-bottom:8px;">' + esc(g.name) + '</div>' +
+                   membersHtml +
+                   '</div>';
           }).join('');
         }
 
@@ -1248,11 +1329,77 @@
           '<h3>My Friends</h3>' + friendsHtml +
           '<hr style="margin:24px 0;opacity:0.2;">' +
           '<h3>My Groups</h3>' +
-          '<button class="btn" style="width:100%;margin-bottom:16px;">Create New Group</button>' +
-          '<div class="empty-state">You are not in any groups.</div>' +
+          '<button class="btn" style="width:100%;margin-bottom:16px;" onclick="currentPage=\'create_group\'; render();">Create New Group</button>' +
+          groupsHtml +
           '</div>' + navHtml();
         bindHdr(); bindNav();
       }
+
+      function renderCreateGroup() {
+        var friendsHtml = '<div class="empty-state">No friends to add.</div>';
+        if (state.friends && state.friends.length > 0) {
+          friendsHtml = state.friends.map(function(fId) {
+            var fd = state.friendData[fId] || {};
+            var name = fd.displayName || fId;
+            return '<div style="display:flex;align-items:center;background:var(--surface);padding:12px;border-radius:6px;margin-bottom:8px;">' +
+                   '<input type="checkbox" id="chk_' + esc(fId) + '" value="' + esc(fId) + '" style="margin-right:12px;width:20px;height:20px;">' +
+                   '<label for="chk_' + esc(fId) + '" style="font-size:16px;flex:1;cursor:pointer;">' + esc(name) + '</label>' +
+                   '</div>';
+          }).join('');
+        }
+
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' +
+          '<div style="padding: 16px; padding-bottom: 90px; max-width: 800px; margin: 0 auto;">' +
+          '<button class="btn" style="margin-bottom:16px;" onclick="currentPage=\'social\'; render();">← Back to Social</button>' +
+          '<h2>Create New Group</h2>' +
+          '<div style="margin-bottom:16px;">' +
+          '<label style="display:block;margin-bottom:8px;font-weight:600;">Group Name</label>' +
+          '<input type="text" id="newGroupName" class="input" placeholder="e.g. Study Group A" style="width:100%;">' +
+          '</div>' +
+          '<h3 style="margin-bottom:12px;">Select Members</h3>' +
+          friendsHtml +
+          '<button class="btn btn-primary" style="width:100%;margin-top:24px;" onclick="createGroupSubmit()">Create Group</button>' +
+          '</div>' + navHtml();
+        bindHdr(); bindNav();
+      }
+
+      window.createGroupSubmit = function() {
+        var nameInput = document.getElementById('newGroupName');
+        var name = nameInput ? nameInput.value.trim() : '';
+        if (!name) return console.log('Please enter a group name');
+        
+        var selected = [];
+        state.friends.forEach(function(fId) {
+          var chk = document.getElementById('chk_' + fId);
+          if (chk && chk.checked) selected.push(fId);
+        });
+        
+        if (selected.length === 0) return console.log('Please select at least one friend');
+        
+        selected.push(state.shareId); // Add self
+        
+        var groupId = Math.random().toString(36).substring(2, 10).toUpperCase();
+        var groupRef = window.fbDoc(window.fbDb, "groups", groupId);
+        
+        window.fbSetDoc(groupRef, {
+          id: groupId,
+          name: name,
+          members: selected,
+          createdBy: state.shareId,
+          createdAt: new Date().toISOString()
+        }).then(function() {
+          console.log('Group created!');
+          // Add group to my user document
+          window.fbUpdateDoc(window.fbDoc(window.fbDb, "users", state.user.uid), {
+            groups: window.fbArrayUnion(groupId)
+          }).then(function() {
+            currentPage = 'social';
+            render();
+          });
+        }).catch(function(err) {
+          console.error('Failed to create group', err);
+        });
+      };
 
       window.sendFriendRequest = function() {
         var input = document.getElementById('addFriendInput'), btn = document.getElementById('addFriendBtn');
@@ -1638,8 +1785,9 @@
                 if (d.attendance) { state.attendance = Object.assign({}, state.attendance, d.attendance); setLocal('attendance', state.attendance); }
                 if (d.seats) { state.seats = Object.assign({}, state.seats, d.seats); setLocal('seats', state.seats); }
                 if (d.shareId) { state.shareId = d.shareId; } else { state.shareId = Math.random().toString(36).substring(2, 8).toUpperCase(); needSync = true; }
-                if (d.friends) { state.friends = d.friends; }
+                if (d.friends) { state.friends = d.friends; fetchFriendsData(); }
                 if (d.requests) { state.requests = d.requests; }
+                if (d.groups) { state.groups = d.groups; fetchGroupsData(); }
                 console.log('Firebase snapshot received:', d);
               } else {
                 state.shareId = Math.random().toString(36).substring(2, 8).toUpperCase();
