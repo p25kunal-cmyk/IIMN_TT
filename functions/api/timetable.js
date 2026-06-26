@@ -17,9 +17,9 @@ export async function onRequest(context) {
 
     const contentType = response.headers.get('content-type') || '';
 
-    // If Google returned HTML (login page), the script needs auth
     if (contentType.includes('text/html')) {
-      return new Response(JSON.stringify({ error: 'auth', message: 'Apps Script requires authentication. Make sure deployment is set to "Anyone" access.' }), {
+      const htmlText = await response.text();
+      return new Response(JSON.stringify({ error: 'auth', message: 'Apps Script requires authentication. Make sure deployment is set to "Anyone" access.', snippet: htmlText.substring(0, 800) }), {
         status: 401,
         headers
       });
