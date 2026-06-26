@@ -956,7 +956,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
     import { getAuth, signInWithRedirect, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, arrayUnion, arrayRemove, onSnapshot } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADOXv5tMuN_jw8iuWOp8sJ0diGYn-KwQE",
@@ -990,6 +990,7 @@
     window.fbUpdateDoc = updateDoc;
     window.fbArrayUnion = arrayUnion;
     window.fbArrayRemove = arrayRemove;
+    window.fbOnSnapshot = onSnapshot;
 
     (function () {
       var ROOT = document.getElementById('root');
@@ -1631,7 +1632,7 @@
             state.user = user;
             state.displayName = user.displayName || 'Anonymous';
             state.email = user.email || '';
-            window.fbGetDoc(window.fbDoc(window.fbDb, "users", user.uid)).then(function(docSnap) {
+            window.fbOnSnapshot(window.fbDoc(window.fbDb, "users", user.uid), function(docSnap) {
               var needSync = false;
               if (docSnap.exists()) {
                 var d = docSnap.data();
@@ -1647,7 +1648,7 @@
               }
               if (needSync) syncToFirebase();
               render();
-            }).catch(console.error);
+            }, console.error);
           } else {
             state.user = null;
             state.shareId = null;
