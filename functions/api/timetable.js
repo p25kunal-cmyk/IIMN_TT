@@ -8,18 +8,18 @@ export async function onRequest(context) {
   });
 
   try {
-    const response = await fetch(EXEC_URL + '&t=' + Date.now(), {
-      redirect: 'follow',
+    const response = await fetch(EXEC_URL, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; TimetableProxy/1.0)'
-      }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*'
+      },
+      redirect: 'follow'
     });
 
     const contentType = response.headers.get('content-type') || '';
 
     if (contentType.includes('text/html')) {
-      const htmlText = await response.text();
-      return new Response(JSON.stringify({ error: 'auth', message: 'Apps Script requires authentication. Make sure deployment is set to "Anyone" access.', snippet: htmlText.substring(0, 800) }), {
+      return new Response(JSON.stringify({ error: 'auth', message: 'Apps Script requires authentication. Make sure deployment is set to "Anyone" access.' }), {
         status: 401,
         headers
       });
