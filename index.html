@@ -1530,7 +1530,7 @@
         ROOT.innerHTML = '<div class="setup-page" style="margin-top:20vh;">' +
           '<div class="setup-logo">🎓</div>' +
           '<div class="setup-title">IIMN Timetable</div>' +
-          '<div class="setup-sub">Welcome! Please sign in with your <b>@iimnagpur.ac.in</b> Google account to view your schedule.</div>' +
+          '<div class="setup-sub">Welcome! Please sign in with any Google account to test the Social feature.</div>' +
           '<button class="btn btn-primary" id="btnMainLogin">Sign in with Google</button>' +
           '<button class="btn" id="btnInstallLogin" style="margin-top:10px;">Install App</button>' +
           '</div>';
@@ -1544,7 +1544,7 @@
         ROOT.innerHTML = '<div class="setup-page">' +
           '<div class="setup-logo" style="color:' + (isAuth ? 'var(--accent)' : 'var(--danger)') + '">' + (isAuth ? '🔐' : '!') + '</div>' +
           '<div class="setup-title">' + (isAuth ? 'Sign in required' : 'Could not load timetable') + '</div>' +
-          '<div class="setup-sub">' + (isAuth ? 'Sign in with your <b>@iimnagpur.ac.in</b> Google account to continue.' : esc(err)) + '</div>' +
+          '<div class="setup-sub">' + (isAuth ? 'Sign in with any Google account to continue.' : esc(err)) + '</div>' +
           (isAuth
             ? '<button class="btn btn-primary" id="btnSignIn">Sign in with Google</button>'
             : '<button class="btn btn-primary" id="btnRetry">Try Again</button>') +
@@ -1623,11 +1623,11 @@
         window.fbOnAuthStateChanged(window.fbAuth, function(user) {
           state.authInitialized = true;
           if (user) {
-            if (!user.email.endsWith('@iimnagpur.ac.in')) {
-              alert('Please sign in using your @iimnagpur.ac.in Google account.');
-              window.fbSignOut(window.fbAuth);
-              return;
-            }
+            // if (!user.email.endsWith('@iimnagpur.ac.in')) {
+            //   alert('Please sign in using your @iimnagpur.ac.in Google account.');
+            //   window.fbSignOut(window.fbAuth);
+            //   return;
+            // }
             state.user = user;
             state.displayName = user.displayName || 'Anonymous';
             state.email = user.email || '';
