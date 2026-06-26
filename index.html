@@ -992,19 +992,17 @@
     window.fbArrayRemove = arrayRemove;
     window.fbOnSnapshot = onSnapshot;
 
-    window.navTo = function(p) {
-      if (typeof currentPage !== 'undefined' && typeof render === 'function') {
-        currentPage = p;
-        render();
-      }
-    };
-
     (function () {
       var ROOT = document.getElementById('root');
       var currentPage = 'timetable'; // 'timetable' | 'attendance' | 'calendar'
       var darkMode = false;
       var calSelectedDate = null;
       var calViewMonth = new Date();
+
+      window.navTo = function(p) {
+        currentPage = p;
+        render();
+      };
 
       var COLORS = ['#e07a5f', '#5aa9e6', '#6b9e78', '#bb8fce', '#e0a020', '#5f9ea0', '#c97b84', '#7b9ed9', '#b07840', '#6fb3b8'];
       function colorFor(c) { var h = 0; for (var i = 0; i < c.length; i++) h = (h * 31 + c.charCodeAt(i)) & 0xffff; return COLORS[h % COLORS.length]; }
