@@ -955,7 +955,7 @@
   <div id="root"></div>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, signInWithRedirect, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
     import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -977,7 +977,7 @@
     window.fbAuth = auth;
     window.fbDb = db;
     window.fbGoogleProvider = googleProvider;
-    window.fbSignInWithPopup = signInWithPopup;
+    window.fbSignInWithRedirect = signInWithRedirect;
     window.fbSignOut = signOut;
     window.fbOnAuthStateChanged = onAuthStateChanged;
     window.fbDoc = doc;
@@ -1047,7 +1047,7 @@
       function fetchData(silent) {
         state.fetching = true;
         if (!silent) render();
-        fetch('/api/timetable?t=' + Date.now())
+        fetch('https://iimn-tt.pages.dev/api/timetable?t=' + Date.now())
           .then(function (r) {
             if (!r.ok) return r.json().catch(function () { return { error: 'http_' + r.status }; });
             return r.json();
@@ -1195,7 +1195,7 @@
           if (state.user) {
             if (confirm('Sign out of ' + state.user.email + '?')) window.fbSignOut(window.fbAuth);
           } else {
-            window.fbSignInWithPopup(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
+            window.fbSignInWithRedirect(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
           }
         };
       }
@@ -1535,7 +1535,7 @@
           '<button class="btn" id="btnInstallLogin" style="margin-top:10px;">Install App</button>' +
           '</div>';
         document.getElementById('btnMainLogin').onclick = function () {
-          window.fbSignInWithPopup(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
+          window.fbSignInWithRedirect(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
         };
         document.getElementById('btnInstallLogin').onclick = openInstall;
       }
