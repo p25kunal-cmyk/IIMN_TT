@@ -1155,6 +1155,21 @@
       font-size: 13px;
       line-height: 1.7;
     }
+
+    .pinned-card {
+      background: var(--bg-elev-2);
+      cursor: pointer;
+    }
+
+    .pinned-card:hover {
+      border-color: var(--accent);
+    }
+
+    .pinned-badge {
+      font-size: 13px;
+      flex-shrink: 0;
+      opacity: 0.5;
+    }
   </style>
 </head>
 
@@ -1578,22 +1593,34 @@
         var nav = ROOT.querySelector('.bottom-nav');
         var page = document.createElement('div'); page.className = 'links-page';
 
-        if (!state.links.length) {
-          page.innerHTML = '<div class="links-empty"><div class="links-empty-icon">🔗</div><div class="links-empty-text">No links saved yet.<br>Tap <b>+</b> to add your first link.</div></div>';
-        } else {
-          // Group by category
+        var html = '';
+
+        // ── Pinned (DEFAULT_LINKS) ──
+        html += '<div class="links-section-title" style="display:flex;align-items:center;gap:6px;">📌 Pinned</div>';
+        html += DEFAULT_LINKS.map(function(lnk, idx) {
+          return '<div class="link-card pinned-card" data-type="pinned" data-idx="' + idx + '">' +
+            '<div class="link-icon">' + (lnk.emoji || '🔗') + '</div>' +
+            '<div class="link-info">' +
+            '<div class="link-title">' + esc(lnk.title) + '</div>' +
+            '<div class="link-url">' + esc(lnk.url) + '</div>' +
+            '</div>' +
+            '<span class="pinned-badge">🔒</span>' +
+            '</div>';
+        }).join('');
+
+        // ── User links ──
+        if (state.links.length) {
           var groups = {};
           state.links.forEach(function(lnk) {
-            var cat = lnk.category || 'General';
+            var cat = lnk.category || 'My Links';
             if (!groups[cat]) groups[cat] = [];
             groups[cat].push(lnk);
           });
-          var html = '';
           Object.keys(groups).sort().forEach(function(cat) {
             html += '<div class="links-section-title">' + esc(cat) + '</div>';
-            html += groups[cat].map(function(lnk, idx) {
+            html += groups[cat].map(function(lnk) {
               var globalIdx = state.links.indexOf(lnk);
-              return '<div class="link-card" data-idx="' + globalIdx + '">' +
+              return '<div class="link-card" data-type="user" data-idx="' + globalIdx + '">' +
                 '<div class="link-icon">' + (lnk.emoji || '🔗') + '</div>' +
                 '<div class="link-info">' +
                 '<div class="link-title">' + esc(lnk.title) + '</div>' +
@@ -1605,9 +1632,9 @@
                 '</div></div>';
             }).join('');
           });
-          page.innerHTML = html;
         }
 
+        page.innerHTML = html;
         ROOT.insertBefore(page, nav);
 
         // FAB
@@ -1615,10 +1642,18 @@
         ROOT.insertBefore(fab, nav);
 
         bindHdr(); bindNav();
-
         fab.onclick = function() { openLinkEditor(null); };
 
-        page.querySelectorAll('.link-card').forEach(function(card) {
+        // Click to open — pinned links
+        page.querySelectorAll('.link-card[data-type="pinned"]').forEach(function(card) {
+          card.addEventListener('click', function() {
+            var idx = parseInt(card.getAttribute('data-idx'));
+            window.open(DEFAULT_LINKS[idx].url, '_blank', 'noopener');
+          });
+        });
+
+        // Click to open — user links
+        page.querySelectorAll('.link-card[data-type="user"]').forEach(function(card) {
           card.addEventListener('click', function(e) {
             if (e.target.closest('.link-action-btn')) return;
             var idx = parseInt(card.getAttribute('data-idx'));
@@ -1825,7 +1860,7 @@
         var sub = getLocal('my-subjects'); if (sub) state.mySubjects = sub;
         var att = getLocal('attendance'); if (att) state.attendance = att;
         var sts = getLocal('seats'); if (sts) state.seats = sts;
-        var lnks = getLocal('links'); if (lnks) state.links = lnks; else state.links = DEFAULT_LINKS.slice();
+        var lnks = getLocal('links'); if (lnks) state.links = lnks;
         var cached = getLocal('cached-timetable');
         if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
         
