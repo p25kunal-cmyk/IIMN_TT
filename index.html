@@ -895,6 +895,12 @@
       color: var(--danger);
     }
 
+    .lec-chip.upcoming {
+      opacity: 0.38;
+      cursor: default;
+      border-style: dashed;
+    }
+
     .lec-chip:active {
       transform: scale(0.82);
     }
@@ -1242,6 +1248,22 @@
         }, { merge: true }).catch(console.error);
       }
       function isAbsent(lid) { return !!state.attendance[lid]; }
+      function isLecturePast(e) {
+        var now = new Date();
+        if (e.end) return e.end <= now;
+        if (e.start) return e.start <= now;
+        // Fall back: parse date string "DD-Mon-YYYY" and compare with today's date
+        if (e.date) {
+          var MONTHS = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+          var p = e.date.split('-');
+          if (p.length === 3) {
+            var lecDay = new Date(parseInt(p[2]), MONTHS[p[1]] || 0, parseInt(p[0]));
+            var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            return lecDay < today;
+          }
+        }
+        return false;
+      }
       function toggleAttendance(lid) {
         if (state.attendance[lid]) delete state.attendance[lid]; else state.attendance[lid] = true;
         setLocal('attendance', state.attendance);
@@ -1736,22 +1758,30 @@
           page.innerHTML = state.mySubjects.map(function (key) {
             var lecs = events.filter(function (e) { return e.type === 'class' && e.key === key; });
             lecs.sort(function (a, b) { return (parseInt(a.week) || 0) - (parseInt(b.week) || 0); });
-            var abCnt = lecs.filter(function (e) { return isAbsent(e.lectureId); }).length;
-            var total = lecs.length, att = total - abCnt;
-            var pct = total ? Math.round(att / total * 100) : 100;
+            var pastLecs = lecs.filter(function (e) { return isLecturePast(e); });
+            var abCnt = pastLecs.filter(function (e) { return isAbsent(e.lectureId); }).length;
+            var pastTotal = pastLecs.length;
+            var att = pastTotal - abCnt;
+            var pct = pastTotal ? Math.round(att / pastTotal * 100) : 100;
             var left = 3 - abCnt;
             var col = colorFor(key.split('-')[0]);
             var pc = left < 0 ? 'danger' : left <= 1 ? 'warn' : 'ok';
             var pt = left < 0 ? Math.abs(left) + ' over!' : left + ' left';
             var bc = left < 0 ? 'var(--danger)' : left <= 1 ? 'var(--warn)' : 'var(--good)';
             var chips = lecs.map(function (e) {
-              var ab = isAbsent(e.lectureId), lid = e.lectureId.replace(/"/g, '');
-              return '<div class="lec-chip' + (ab ? ' absent' : ' present') + '" data-lid="' + esc(lid) + '">' + esc(e.week) + '</div>';
+              var ab = isAbsent(e.lectureId);
+              var past = isLecturePast(e);
+              var cls = ab ? ' absent' : (past ? ' present' : ' upcoming');
+              var lid = e.lectureId.replace(/"/g, '');
+              return '<div class="lec-chip' + cls + '" data-lid="' + esc(lid) + '" data-upcoming="' + (!past ? '1' : '') + '">' + esc(e.week) + '</div>';
             }).join('');
+            var statsHtml = pastTotal
+              ? att + ' attended \xb7 ' + abCnt + ' absent \xb7 ' + pct + '%' + (lecs.length > pastTotal ? ' <span style="color:var(--text-dim)">(' + (lecs.length - pastTotal) + ' upcoming)</span>' : '')
+              : '<span style="color:var(--text-dim)">No classes yet</span>';
             return '<div class="att-card">' +
               '<div class="att-card-head"><span class="att-subject" style="color:' + col + '">' + esc(key) + '</span><span class="att-status-pill ' + pc + '">' + pt + '</span></div>' +
               '<div class="att-bar-wrap"><div class="att-bar" style="width:' + pct + '%;background:' + bc + '"></div></div>' +
-              '<div class="att-stats">' + att + ' attended · ' + abCnt + ' absent · ' + pct + '%</div>' +
+              '<div class="att-stats">' + statsHtml + '</div>' +
               '<div class="att-lectures">' + chips + '</div>' +
               '</div>';
           }).join('');
@@ -1760,6 +1790,7 @@
         bindHdr(); bindNav();
         ROOT.querySelectorAll('.lec-chip').forEach(function (chip) {
           chip.addEventListener('click', function () {
+            if (chip.getAttribute('data-upcoming') === '1') return; // can't mark future classes
             var lid = chip.getAttribute('data-lid'); if (!lid) return;
             toggleAttendance(lid); renderAttendance();
           });
