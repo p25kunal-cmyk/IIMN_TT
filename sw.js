@@ -1,4 +1,4 @@
-const CACHE = 'timetable-v5';
+const CACHE = 'timetable-v6';
 const SHELL = ['/index.html', '/manifest.json'];
 
 self.addEventListener('install', function(e){
