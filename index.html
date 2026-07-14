@@ -1562,7 +1562,16 @@
       }
 
       // ── Links page ──────────────────────────────────────────────
-      var LINK_EMOJIS = ['🔗','📄','📝','🎓','📚','💻','🌐','📊','📅','🔒','📬','🎯','🛠','💡','📢','🗂','🏫','📋','🔑','📌'];
+      var DEFAULT_LINKS = [
+        { title: 'OLT', url: 'https://olt.iimnagpur.ac.in/Default.aspx', category: 'Academics', emoji: '🎓' },
+        { title: 'Moodle', url: 'https://moodle.iimnagpur.ac.in/portal/', category: 'Academics', emoji: '📚' },
+        { title: 'Master Timetable', url: 'https://docs.google.com/spreadsheets/d/1l6VH49DEa4n-R6t408gDEgFpqfYpvdSwd7RMaFEjAEA/edit?gid=0#gid=0', category: 'Academics', emoji: '📅' },
+        { title: 'Sports Booking', url: 'https://iimnbooking.pythonanywhere.com/', category: 'Tools', emoji: '🏫' },
+        { title: 'Class Absentee', url: 'https://docs.google.com/forms/d/e/1FAIpQLSdKa3lbAdPLViC1wl58cFfRwT_ajadF6RBZCjem42G1dLvliw/viewform', category: 'Forms', emoji: '📋' },
+        { title: 'Campus Exit', url: 'https://forms.gle/ghvn4HwHAgVSt6i4A', category: 'Forms', emoji: '🚪' }
+      ];
+
+      var LINK_EMOJIS = ['🔗','📄','📝','🎓','📚','💻','🌐','📊','📅','🔒','📬','🎯','🛠','💡','📢','🗂','🏫','📋','🔑','📌','🚪'];
 
       function renderLinks() {
         ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' + navHtml();
@@ -1816,7 +1825,7 @@
         var sub = getLocal('my-subjects'); if (sub) state.mySubjects = sub;
         var att = getLocal('attendance'); if (att) state.attendance = att;
         var sts = getLocal('seats'); if (sts) state.seats = sts;
-        var lnks = getLocal('links'); if (lnks) state.links = lnks;
+        var lnks = getLocal('links'); if (lnks) state.links = lnks; else state.links = DEFAULT_LINKS.slice();
         var cached = getLocal('cached-timetable');
         if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
         
