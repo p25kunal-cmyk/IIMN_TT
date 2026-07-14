@@ -1396,7 +1396,8 @@
       function render() {
         if (!state.authInitialized) return renderLoading();
         // On localhost: always skip auth gate
-        if (!IS_LOCAL && state.authInitialized && !state.user) return renderLogin();
+        var isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+        if (!isLocal && state.authInitialized && !state.user) return renderLogin();
 
         if (state.fetchError === 'auth' && !state.data) return renderError('auth');
         if (state.fetchError && !state.data) return renderError(state.fetchError);
@@ -1913,8 +1914,8 @@
       }
 
       // ── Init ──────────────────────────────────────────────
-      var IS_LOCAL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
       function init() {
+        var isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
         var dm = getLocal('dark-mode'); if (dm) applyTheme(true);
         var sub = getLocal('my-subjects'); if (sub) state.mySubjects = sub;
         var att = getLocal('attendance'); if (att) state.attendance = att;
@@ -1923,7 +1924,7 @@
         var cached = getLocal('cached-timetable');
         if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
         
-        if (IS_LOCAL) {
+        if (isLocal) {
           // ── Local dev: skip Firebase auth, inject mock user ──
           state.user = { uid: 'local-dev', email: 'dev@localhost', photoURL: '', displayName: 'Local Dev' };
           state.authInitialized = true;
