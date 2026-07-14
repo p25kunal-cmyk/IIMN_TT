@@ -1219,8 +1219,33 @@
       var calSelectedDate = null;
       var calViewMonth = new Date();
 
-      var COLORS = ['#e07a5f', '#5aa9e6', '#6b9e78', '#bb8fce', '#e0a020', '#5f9ea0', '#c97b84', '#7b9ed9', '#b07840', '#6fb3b8'];
-      function colorFor(c) { var h = 0; for (var i = 0; i < c.length; i++) h = (h * 31 + c.charCodeAt(i)) & 0xffff; return COLORS[h % COLORS.length]; }
+      // 20 hand-picked visually distinct colors
+      var COLORS = [
+        '#e07a5f','#5aa9e6','#6b9e78','#bb8fce','#e0a020',
+        '#5f9ea0','#c97b84','#7b9ed9','#b07840','#6fb3b8',
+        '#e8784d','#4caf82','#9b72cf','#d4a843','#5b8dd9',
+        '#c45c7a','#52b5a3','#e06060','#7aad5a','#a07fbf'
+      ];
+      var _colorMap = {};
+      function buildColorMap() {
+        _colorMap = {};
+        if (!state.data) return;
+        var subjects = [];
+        state.data.rows.forEach(function(r) {
+          r.cells.forEach(function(c) {
+            c.split('\n').forEach(function(l) {
+              var p = parseLine(l);
+              if (p && subjects.indexOf(p.subject) === -1) subjects.push(p.subject);
+            });
+          });
+        });
+        subjects.sort();
+        subjects.forEach(function(sub, i) { _colorMap[sub] = COLORS[i % COLORS.length]; });
+      }
+      function colorFor(c) {
+        var sub = (c || '').split('-')[0].toUpperCase();
+        return _colorMap[sub] || COLORS[0];
+      }
 
       function parseLine(line) {
         if (!line || typeof line !== 'string') return null;
@@ -1375,6 +1400,7 @@
         if (state.fetchError === 'auth' && !state.data) return renderError('auth');
         if (state.fetchError && !state.data) return renderError(state.fetchError);
         if (!state.data) return renderLoading();
+        buildColorMap(); // assign unique colors to subjects before any page renders
         if (currentPage === 'attendance') return renderAttendance();
         if (currentPage === 'calendar') return renderCalendar();
         if (currentPage === 'links') return renderLinks();
