@@ -1395,9 +1395,7 @@
       // ── Render ──────────────────────────────────────────────────
       function render() {
         if (!state.authInitialized) return renderLoading();
-        // On localhost: always skip auth gate
-        var isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-        if (!isLocal && state.authInitialized && !state.user) return renderLogin();
+        if (state.authInitialized && !state.user) return renderLogin();
 
         if (state.fetchError === 'auth' && !state.data) return renderError('auth');
         if (state.fetchError && !state.data) return renderError(state.fetchError);
@@ -1915,7 +1913,6 @@
 
       // ── Init ──────────────────────────────────────────────
       function init() {
-        var isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
         var dm = getLocal('dark-mode'); if (dm) applyTheme(true);
         var sub = getLocal('my-subjects'); if (sub) state.mySubjects = sub;
         var att = getLocal('attendance'); if (att) state.attendance = att;
@@ -1924,14 +1921,7 @@
         var cached = getLocal('cached-timetable');
         if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
         
-        if (isLocal) {
-          // ── Local dev: skip Firebase auth, inject mock user ──
-          state.user = { uid: 'local-dev', email: 'dev@localhost', photoURL: '', displayName: 'Local Dev' };
-          state.authInitialized = true;
-          render();
-          fetchData();
-        } else {
-          // ── Production: normal Firebase auth ──
+        // ── Normal Firebase auth ──
           window.fbOnAuthStateChanged(window.fbAuth, function(user) {
             state.authInitialized = true;
             if (user) {
@@ -1958,7 +1948,6 @@
           });
           render();
           fetchData();
-        }
 
         setInterval(function () { if (state.data && currentPage === 'timetable') updateTick(); }, 15000);
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () { });
