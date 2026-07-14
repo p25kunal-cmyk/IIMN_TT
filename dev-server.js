@@ -23,38 +23,40 @@ const MIME = {
   '.webp': 'image/webp',
 };
 
-function proxyTimetable(res) {
-  const opts = new URL(EXEC_URL);
-  const req = https.get({
-    hostname: opts.hostname,
-    path: opts.pathname + opts.search,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      'Accept': 'application/json, text/plain, */*'
-    }
-  }, (r) => {
-    let body = '';
-    r.on('data', d => body += d);
-    r.on('end', () => {
-      const ct = r.headers['content-type'] || '';
-      if (ct.includes('text/html')) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'auth', message: 'Auth required' }));
-        return;
-      }
-      try { JSON.parse(body); } catch(e) {
-        res.writeHead(502, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'invalid_response', raw: body.slice(0, 200) }));
-        return;
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(body);
+async function proxyTimetable(res) {
+  try {
+    const response = await fetch(EXEC_URL, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json, text/plain, */*'
+      },
+      redirect: 'follow'
     });
-  });
-  req.on('error', err => {
+
+    const ct = response.headers.get('content-type') || '';
+    if (ct.includes('text/html')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'auth', message: 'Apps Script requires authentication. Make sure deployment is set to "Anyone" access.' }));
+      return;
+    }
+
+    const text = await response.text();
+    
+    // Validate JSON
+    try {
+      JSON.parse(text);
+    } catch(e) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_response', raw: text.slice(0, 200) }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(text);
+  } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'proxy_error', message: err.message }));
-  });
+  }
 }
 
 const server = http.createServer((req, res) => {
