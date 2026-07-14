@@ -1948,7 +1948,7 @@
             if (prefix.match(/^p\d{2}/i)) prefix = prefix.substring(3);
             nm = prefix.charAt(0).toUpperCase() + prefix.slice(1);
           }
-          if (!nm) nm = 'Unknown';
+          if (!nm) return; // Skip showing users with no name/email data
 
           var info = document.createElement('div');
           info.innerHTML = '<div style="font-weight: 500; font-size: 15px;">' + esc(nm) + '</div>' +
