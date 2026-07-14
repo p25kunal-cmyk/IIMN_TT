@@ -9,7 +9,8 @@ const path = require('path');
 
 const PORT = 8888;
 const ROOT = __dirname;
-const EXEC_URL = 'https://script.google.com/macros/s/AKfycbynFmcsk5S2ImeQEphSdfsonAHpeMrh1MtXOqP7D72DLOJGLPKMPz_XvAxCkfJEQtsgMQ/exec';
+// MUST include ?action=data so Apps Script returns JSON instead of its HTML page
+const EXEC_URL = 'https://script.google.com/macros/s/AKfycbynFmcsk5S2ImeQEphSdfsonAHpeMrh1MtXOqP7D72DLOJGLPKMPz_XvAxCkfJEQtsgMQ/exec?action=data';
 
 const MIME = {
   '.html': 'text/html',

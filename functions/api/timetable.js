@@ -1,5 +1,5 @@
 export async function onRequest(context) {
-  const EXEC_URL = 'https://script.google.com/macros/s/AKfycbynFmcsk5S2ImeQEphSdfsonAHpeMrh1MtXOqP7D72DLOJGLPKMPz_XvAxCkfJEQtsgMQ/exec';
+  const EXEC_URL = 'https://script.google.com/macros/s/AKfycbynFmcsk5S2ImeQEphSdfsonAHpeMrh1MtXOqP7D72DLOJGLPKMPz_XvAxCkfJEQtsgMQ/exec?action=data';
 
   const headers = new Headers({
     'Access-Control-Allow-Origin': '*',
