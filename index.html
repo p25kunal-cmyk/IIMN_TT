@@ -1942,6 +1942,8 @@
           img.style.borderRadius = '50%';
           img.style.objectFit = 'cover';
 
+          if (!u.email || !u.email.endsWith('@iimnagpur.ac.in')) return; // Skip non-IIMN emails or missing emails
+
           var nm = u.displayName;
           if (!nm && u.email) {
             var prefix = u.email.split('@')[0];
