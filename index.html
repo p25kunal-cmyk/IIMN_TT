@@ -1184,7 +1184,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADOXv5tMuN_jw8iuWOp8sJ0diGYn-KwQE",
@@ -1211,6 +1211,8 @@
     window.fbDoc = doc;
     window.fbGetDoc = getDoc;
     window.fbSetDoc = setDoc;
+    window.fbCollection = collection;
+    window.fbGetDocs = getDocs;
 
     (function () {
       var ROOT = document.getElementById('root');
@@ -1259,7 +1261,7 @@
         return null;
       }
 
-      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, links: [], lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false };
+      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, links: [], lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false, adminUsers: null, networkCompareMode: false, networkSelected: {} };
       function getLocal(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
       function setLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
       
@@ -1269,7 +1271,10 @@
           mySubjects: state.mySubjects,
           attendance: state.attendance,
           seats: state.seats,
-          links: state.links
+          links: state.links,
+          email: state.user.email || '',
+          displayName: state.user.displayName || '',
+          photoURL: state.user.photoURL || ''
         }, { merge: true }).catch(console.error);
       }
       function isAbsent(lid) { return !!state.attendance[lid]; }
@@ -1404,6 +1409,7 @@
         if (currentPage === 'attendance') return renderAttendance();
         if (currentPage === 'calendar') return renderCalendar();
         if (currentPage === 'links') return renderLinks();
+        if (currentPage === 'network' && state.user && state.user.email === 'p25kunal@iimnagpur.ac.in') return renderNetwork();
         renderTimetable();
       }
 
@@ -1427,12 +1433,14 @@
       }
 
       function navHtml() {
-        var isT = currentPage === 'timetable', isA = currentPage === 'attendance', isC = currentPage === 'calendar', isL = currentPage === 'links';
+        var isT = currentPage === 'timetable', isA = currentPage === 'attendance', isC = currentPage === 'calendar', isL = currentPage === 'links', isN = currentPage === 'network';
+        var isAdmin = state.user && state.user.email === 'p25kunal@iimnagpur.ac.in';
         return '<div class="bottom-nav">' +
           '<button class="nav-btn' + (isT ? ' active' : '') + '" id="navTT"><span class="nav-icon">🗓</span>Timetable</button>' +
           '<button class="nav-btn' + (isC ? ' active' : '') + '" id="navCal"><span class="nav-icon">📅</span>Calendar</button>' +
           '<button class="nav-btn' + (isA ? ' active' : '') + '" id="navAT"><span class="nav-icon">📊</span>Attendance</button>' +
           '<button class="nav-btn' + (isL ? ' active' : '') + '" id="navLinks"><span class="nav-icon">🔗</span>Links</button>' +
+          (isAdmin ? '<button class="nav-btn' + (isN ? ' active' : '') + '" id="navNet"><span class="nav-icon">👥</span>Network</button>' : '') +
           '</div>';
       }
 
@@ -1461,11 +1469,12 @@
         };
       }
       function bindNav() {
-        var t = document.getElementById('navTT'), c = document.getElementById('navCal'), a = document.getElementById('navAT'), l = document.getElementById('navLinks');
+        var t = document.getElementById('navTT'), c = document.getElementById('navCal'), a = document.getElementById('navAT'), l = document.getElementById('navLinks'), n = document.getElementById('navNet');
         if (t) t.onclick = function () { currentPage = 'timetable'; render(); };
         if (c) c.onclick = function () { currentPage = 'calendar'; render(); };
         if (a) a.onclick = function () { currentPage = 'attendance'; render(); };
         if (l) l.onclick = function () { currentPage = 'links'; render(); };
+        if (n) n.onclick = function () { currentPage = 'network'; render(); };
       }
 
       // ── Timetable page ──────────────────────────────────────────
@@ -1769,6 +1778,192 @@
           syncToFirebase();
           ov.remove();
           renderLinks();
+        };
+      }
+
+      // ── Network / Admin page ────────────────────────────────────
+      function fetchUsers() {
+        if (!window.fbCollection || !window.fbGetDocs) return;
+        window.fbGetDocs(window.fbCollection(window.fbDb, "users")).then(function(snapshot) {
+          var users = [];
+          snapshot.forEach(function(doc) {
+            var d = doc.data();
+            d.uid = doc.id;
+            users.push(d);
+          });
+          state.adminUsers = users;
+          render();
+        }).catch(function(e) {
+          console.error("Error fetching users:", e);
+          alert("Could not fetch users. Make sure Firestore Security Rules allow read access to the users collection.");
+        });
+      }
+
+      function buildGroupEvents() {
+        if (!state.data) return [];
+        var selectedIds = Object.keys(state.networkSelected);
+        if (!selectedIds.length) return [];
+        
+        var events = [];
+        state.data.rows.forEach(function (row) {
+          row.cells.forEach(function (cell, idx) {
+            var sh = state.data.slotHeaders[idx] || '';
+            var range = parseSlotRange(sh);
+            var lines = cell.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+            if (!lines.length) return;
+            var cl = lines.filter(function (l) { return parseLine(l) !== null; });
+            if (!cl.length) return; // Info slot, ignore for compare
+            
+            var busyUsers = [];
+            cl.forEach(function (line) {
+              var p = parseLine(line);
+              if (!p) return;
+              selectedIds.forEach(function(uid) {
+                var u = state.networkSelected[uid];
+                if (u.mySubjects && u.mySubjects.includes(p.key)) {
+                  var nm = u.displayName || u.email;
+                  if (!busyUsers.includes(nm)) busyUsers.push(nm);
+                }
+              });
+            });
+
+            if (busyUsers.length === 0) {
+              events.push({
+                type: 'class', date: row.date, day: row.day, slotIndex: idx, slotHeader: sh,
+                subject: 'FREE', section: '', room: 'Everyone is Free!', key: 'FREE', week: '',
+                lectureId: 'FREE_' + row.date + '_' + idx,
+                cancelled: false, isFree: true,
+                start: range ? dtr(row.date, range.start) : null, end: range ? dtr(row.date, range.end) : null
+              });
+            } else {
+              events.push({
+                type: 'class', date: row.date, day: row.day, slotIndex: idx, slotHeader: sh,
+                subject: 'BUSY', section: '', room: 'Busy: ' + busyUsers.join(', '), key: 'BUSY', week: '',
+                lectureId: 'BUSY_' + row.date + '_' + idx,
+                cancelled: false, isBusy: true,
+                start: range ? dtr(row.date, range.start) : null, end: range ? dtr(row.date, range.end) : null
+              });
+            }
+          });
+        });
+        return events;
+      }
+
+      function groupDaysHtml(events, td) {
+        var order = [], byDate = {};
+        state.data.rows.forEach(function (r) { if (!byDate[r.date]) { byDate[r.date] = []; order.push(r.date); } });
+        events.forEach(function (e) { byDate[e.date].push(e); });
+        return order.map(function (date) {
+          var evs = byDate[date].slice().sort(function (a, b) { return a.slotIndex - b.slotIndex; });
+          if (!evs.length) return '';
+          var r = state.data.rows.find(function (x) { return x.date === date; });
+          var isToday = date === td;
+          var body = evs.map(function (e) {
+            var col = e.isFree ? 'var(--success)' : 'var(--danger)';
+            var bgCol = e.isFree ? 'rgba(76, 175, 130, 0.15)' : 'rgba(239, 83, 80, 0.1)';
+            return '<div class="slot-row" style="background: ' + bgCol + ';">' +
+              '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
+              '<div class="slot-main">' +
+              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + '</span></div>' +
+              '<div style="display:flex;align-items:center;"><span class="room-chip" style="white-space: normal;">' + esc(e.room) + '</span></div>' +
+              '</div></div>';
+          }).join('');
+          return '<div class="day-card' + (isToday ? ' today' : '') + '" data-date="' + esc(date) + '">' +
+            '<div class="day-head"><span><span class="day-name">' + esc(r ? r.day : '') + '</span>' + (isToday ? '<span class="today-tag">Today</span>' : '') + '</span><span class="day-date">' + esc(date) + '</span></div>' +
+            body + '</div>';
+        }).join('');
+      }
+
+      function renderGroupCompare() {
+        var events = buildGroupEvents(), td = todayStr();
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + 
+          '<div style="padding: 15px; background: var(--bg-elev-2); display: flex; align-items: center; justify-content: space-between;">' +
+          '<strong>Common Free Time</strong>' +
+          '<button id="btnBackNet" style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text-norm); padding: 6px 12px; border-radius: 6px;">← Back</button>' +
+          '</div></div>' +
+          '<div class="days" style="padding-bottom: 100px;">' + groupDaysHtml(events, td) + '</div>' + navHtml();
+        bindHdr(); bindNav();
+        document.getElementById('btnBackNet').onclick = function() {
+          state.networkCompareMode = false;
+          render();
+        };
+      }
+
+      function renderNetwork() {
+        if (!state.adminUsers) {
+          fetchUsers();
+          ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' + 
+            '<div style="text-align:center; padding: 40px; color: var(--text-dim);">Loading network data...</div>' + navHtml();
+          bindHdr(); bindNav();
+          return;
+        }
+
+        if (state.networkCompareMode) return renderGroupCompare();
+
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + 
+          '<div style="padding: 15px; background: var(--bg-elev-2); display: flex; justify-content: space-between; align-items: center;">' +
+          '<strong>Select Users to Compare</strong>' +
+          '<button id="btnCompare" style="background: var(--accent); color: #000; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer;">Find Free Time</button>' +
+          '</div></div>' + navHtml();
+
+        var nav = ROOT.querySelector('.bottom-nav');
+        var page = document.createElement('div');
+        page.style.padding = '15px';
+        page.style.paddingBottom = '100px';
+
+        state.adminUsers.forEach(function(u) {
+          var div = document.createElement('div');
+          div.style.padding = '12px';
+          div.style.marginBottom = '8px';
+          div.style.background = 'var(--bg-elev-1)';
+          div.style.borderRadius = '8px';
+          div.style.display = 'flex';
+          div.style.alignItems = 'center';
+          div.style.gap = '12px';
+          div.style.cursor = 'pointer';
+
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.style.width = '20px';
+          cb.style.height = '20px';
+          cb.style.pointerEvents = 'none'; // let the div click handle it
+          cb.checked = !!state.networkSelected[u.uid];
+
+          var img = document.createElement('img');
+          img.src = u.photoURL || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjNDQ0Ii8+PC9zdmc+';
+          img.style.width = '40px';
+          img.style.height = '40px';
+          img.style.borderRadius = '50%';
+          img.style.objectFit = 'cover';
+
+          var info = document.createElement('div');
+          info.innerHTML = '<div style="font-weight: 500; font-size: 15px;">' + esc(u.displayName || 'Unknown') + '</div>' +
+                           '<div style="font-size: 13px; color: var(--text-dim);">' + esc(u.email || u.uid) + '</div>' +
+                           '<div style="font-size: 11px; color: var(--accent); margin-top: 4px;">' + (u.mySubjects ? u.mySubjects.length : 0) + ' subjects</div>';
+
+          div.appendChild(cb);
+          div.appendChild(img);
+          div.appendChild(info);
+          
+          div.onclick = function() {
+            cb.checked = !cb.checked;
+            if (cb.checked) state.networkSelected[u.uid] = u;
+            else delete state.networkSelected[u.uid];
+          };
+
+          page.appendChild(div);
+        });
+
+        ROOT.insertBefore(page, nav);
+        bindHdr(); bindNav();
+
+        document.getElementById('btnCompare').onclick = function() {
+          if (Object.keys(state.networkSelected).length < 2) {
+            alert("Please select at least 2 users to compare.");
+            return;
+          }
+          state.networkCompareMode = true;
+          render();
         };
       }
 
