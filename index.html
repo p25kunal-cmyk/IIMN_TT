@@ -1821,7 +1821,13 @@
               selectedIds.forEach(function(uid) {
                 var u = state.networkSelected[uid];
                 if (u.mySubjects && u.mySubjects.includes(p.key)) {
-                  var nm = u.displayName || u.email;
+                  var nm = u.displayName;
+                  if (!nm && u.email) {
+                    var prefix = u.email.split('@')[0];
+                    if (prefix.match(/^p\d{2}/i)) prefix = prefix.substring(3);
+                    nm = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                  }
+                  if (!nm) nm = 'Unknown';
                   if (!busyUsers.includes(nm)) busyUsers.push(nm);
                 }
               });
@@ -1936,8 +1942,16 @@
           img.style.borderRadius = '50%';
           img.style.objectFit = 'cover';
 
+          var nm = u.displayName;
+          if (!nm && u.email) {
+            var prefix = u.email.split('@')[0];
+            if (prefix.match(/^p\d{2}/i)) prefix = prefix.substring(3);
+            nm = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+          }
+          if (!nm) nm = 'Unknown';
+
           var info = document.createElement('div');
-          info.innerHTML = '<div style="font-weight: 500; font-size: 15px;">' + esc(u.displayName || 'Unknown') + '</div>' +
+          info.innerHTML = '<div style="font-weight: 500; font-size: 15px;">' + esc(nm) + '</div>' +
                            '<div style="font-size: 13px; color: var(--text-dim);">' + esc(u.email || u.uid) + '</div>' +
                            '<div style="font-size: 11px; color: var(--accent); margin-top: 4px;">' + (u.mySubjects ? u.mySubjects.length : 0) + ' subjects</div>';
 
