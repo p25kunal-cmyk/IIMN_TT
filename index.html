@@ -1911,7 +1911,8 @@
         document.getElementById('closeInst').onclick = function () { ov.remove(); };
       }
 
-      // ── Init ────────────────────────────────────────────────────
+      // ── Init ──────────────────────────────────────────────
+      var IS_LOCAL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
       function init() {
         var dm = getLocal('dark-mode'); if (dm) applyTheme(true);
         var sub = getLocal('my-subjects'); if (sub) state.mySubjects = sub;
@@ -1921,33 +1922,42 @@
         var cached = getLocal('cached-timetable');
         if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
         
-        window.fbOnAuthStateChanged(window.fbAuth, function(user) {
+        if (IS_LOCAL) {
+          // ── Local dev: skip Firebase auth, inject mock user ──
+          state.user = { uid: 'local-dev', email: 'dev@localhost', photoURL: '', displayName: 'Local Dev' };
           state.authInitialized = true;
-          if (user) {
-            if (!user.email.endsWith('@iimnagpur.ac.in')) {
-              alert('Please sign in using your @iimnagpur.ac.in Google account.');
-              window.fbSignOut(window.fbAuth);
-              return;
-            }
-            state.user = user;
-            window.fbGetDoc(window.fbDoc(window.fbDb, "users", user.uid)).then(function(docSnap) {
-              if (docSnap.exists()) {
-                var d = docSnap.data();
-                if (d.mySubjects) { state.mySubjects = d.mySubjects; setLocal('my-subjects', d.mySubjects); }
-                if (d.attendance) { state.attendance = Object.assign({}, state.attendance, d.attendance); setLocal('attendance', state.attendance); }
-                if (d.seats) { state.seats = Object.assign({}, state.seats, d.seats); setLocal('seats', state.seats); }
-                if (d.links) { state.links = d.links; setLocal('links', d.links); }
-              }
-              render();
-            }).catch(console.error);
-          } else {
-            state.user = null;
-          }
           render();
-        });
+          fetchData();
+        } else {
+          // ── Production: normal Firebase auth ──
+          window.fbOnAuthStateChanged(window.fbAuth, function(user) {
+            state.authInitialized = true;
+            if (user) {
+              if (!user.email.endsWith('@iimnagpur.ac.in')) {
+                alert('Please sign in using your @iimnagpur.ac.in Google account.');
+                window.fbSignOut(window.fbAuth);
+                return;
+              }
+              state.user = user;
+              window.fbGetDoc(window.fbDoc(window.fbDb, "users", user.uid)).then(function(docSnap) {
+                if (docSnap.exists()) {
+                  var d = docSnap.data();
+                  if (d.mySubjects) { state.mySubjects = d.mySubjects; setLocal('my-subjects', d.mySubjects); }
+                  if (d.attendance) { state.attendance = Object.assign({}, state.attendance, d.attendance); setLocal('attendance', state.attendance); }
+                  if (d.seats) { state.seats = Object.assign({}, state.seats, d.seats); setLocal('seats', state.seats); }
+                  if (d.links) { state.links = d.links; setLocal('links', d.links); }
+                }
+                render();
+              }).catch(console.error);
+            } else {
+              state.user = null;
+            }
+            render();
+          });
+          render();
+          fetchData();
+        }
 
-        render();
-        fetchData();
         setInterval(function () { if (state.data && currentPage === 'timetable') updateTick(); }, 15000);
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () { });
       }
