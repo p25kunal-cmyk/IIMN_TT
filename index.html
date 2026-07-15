@@ -1439,7 +1439,7 @@
           '<button class="nav-btn' + (isT ? ' active' : '') + '" id="navTT"><span class="nav-icon">🗓</span>Timetable</button>' +
           '<button class="nav-btn' + (isC ? ' active' : '') + '" id="navCal"><span class="nav-icon">📅</span>Calendar</button>' +
           '<button class="nav-btn' + (isA ? ' active' : '') + '" id="navAT"><span class="nav-icon">📊</span>Attendance</button>' +
-          '<button class="nav-btn' + (isL ? ' active' : '') + '" id="navLinks"><span class="nav-icon">🔗</span>Links</button>' +
+          '<button class="nav-btn' + (isL ? ' active' : '') + '" id="navLinks" style="position:relative;"><span class="nav-icon">🔗</span>Links' + (!getLocal('seen-links') ? '<div style="position:absolute;top:4px;right:16px;width:8px;height:8px;background:var(--accent);border-radius:50%;"></div>' : '') + '</button>' +
           (isAdmin ? '<button class="nav-btn' + (isN ? ' active' : '') + '" id="navNet"><span class="nav-icon">👥</span>Network</button>' : '') +
           '</div>';
       }
@@ -1473,7 +1473,7 @@
         if (t) t.onclick = function () { currentPage = 'timetable'; render(); };
         if (c) c.onclick = function () { currentPage = 'calendar'; render(); };
         if (a) a.onclick = function () { currentPage = 'attendance'; render(); };
-        if (l) l.onclick = function () { currentPage = 'links'; render(); };
+        if (l) l.onclick = function () { setLocal('seen-links', true); currentPage = 'links'; render(); };
         if (n) n.onclick = function () { currentPage = 'network'; render(); };
       }
 
