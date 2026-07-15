@@ -1966,6 +1966,20 @@
             '</div></div>';
         }
         
+        var knownCount = 0;
+        state.adminUsers.forEach(function(u) {
+          if (!u.email || !u.email.endsWith('@iimnagpur.ac.in')) return;
+          var nm = u.displayName;
+          if (!nm && u.email) {
+            var prefix = u.email.split('@')[0];
+            if (prefix.match(/^p\d{2}/i)) prefix = prefix.substring(3);
+            nm = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+          }
+          if (nm) knownCount++;
+        });
+
+        groupsHtml += '<div style="margin-bottom: 12px; font-size: 14px; color: var(--text-dim);">' + knownCount + ' students found</div>';
+
         page.innerHTML = groupsHtml;
 
         state.adminUsers.forEach(function(u) {
