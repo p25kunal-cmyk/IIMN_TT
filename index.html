@@ -1261,7 +1261,7 @@
         return null;
       }
 
-      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, links: [], lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false, adminUsers: null, networkCompareMode: false, networkSelected: {}, adminGroups: {} };
+      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, links: [], lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false, adminUsers: null, networkCompareMode: false, networkMyGroupsMode: false, networkSelected: {}, adminGroups: {} };
       function getLocal(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
       function setLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
       
@@ -1931,6 +1931,76 @@
         }
       }
 
+      function renderMyGroups() {
+        var grpNames = Object.keys(state.adminGroups);
+        
+        ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + 
+          '<div style="padding: 15px; background: var(--bg-elev-2); display: flex; align-items: center; justify-content: space-between;">' +
+          '<strong>My Groups</strong>' +
+          '<button id="btnBackGrp" style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text-norm); padding: 6px 12px; border-radius: 6px;">← Back</button>' +
+          '</div></div>' + navHtml();
+
+        var nav = ROOT.querySelector('.bottom-nav');
+        var page = document.createElement('div');
+        page.style.padding = '15px';
+        page.style.paddingBottom = '100px';
+
+        if (grpNames.length === 0) {
+          page.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--text-dim);">No saved groups yet.<br><br>Go back to Compare Users, select some students, and click Save Group!</div>';
+        } else {
+          grpNames.forEach(function(gn) {
+            var div = document.createElement('div');
+            div.style.padding = '15px';
+            div.style.marginBottom = '12px';
+            div.style.background = 'var(--bg-elev-1)';
+            div.style.borderRadius = '8px';
+            div.style.display = 'flex';
+            div.style.justifyContent = 'space-between';
+            div.style.alignItems = 'center';
+            div.style.cursor = 'pointer';
+            
+            var membersCount = state.adminGroups[gn].length;
+            
+            div.innerHTML = '<div><div style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">' + esc(gn) + '</div><div style="font-size: 13px; color: var(--text-dim);">' + membersCount + ' members</div></div>' +
+                            '<button class="btnDelGrp" data-grp="' + esc(gn) + '" style="background: rgba(239, 83, 80, 0.1); color: var(--danger); border: 1px solid rgba(239, 83, 80, 0.2); padding: 6px 12px; border-radius: 6px; cursor: pointer; margin-left: 10px;">Delete</button>';
+            
+            div.onclick = function(e) {
+              if (e.target.tagName === 'BUTTON') return;
+              var uids = state.adminGroups[gn];
+              state.networkSelected = {};
+              uids.forEach(function(uid) {
+                var u = state.adminUsers.find(function(x){return x.uid===uid;});
+                if (u) state.networkSelected[uid] = u;
+              });
+              state.networkCompareMode = true;
+              render();
+            };
+            
+            page.appendChild(div);
+          });
+        }
+        
+        ROOT.insertBefore(page, nav);
+        bindHdr(); bindNav();
+        
+        document.getElementById('btnBackGrp').onclick = function() {
+          state.networkMyGroupsMode = false;
+          render();
+        };
+        
+        var delBtns = page.querySelectorAll('.btnDelGrp');
+        delBtns.forEach(function(b) {
+          b.onclick = function() {
+            var gn = b.getAttribute('data-grp');
+            if (confirm("Delete group '" + gn + "'?")) {
+              delete state.adminGroups[gn];
+              setLocal('admin-groups', state.adminGroups);
+              renderMyGroups();
+            }
+          };
+        });
+      }
+
       function renderNetwork() {
         if (!state.adminUsers) {
           fetchUsers();
@@ -1941,11 +2011,13 @@
         }
 
         if (state.networkCompareMode) return renderGroupCompare();
+        if (state.networkMyGroupsMode) return renderMyGroups();
 
         ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + 
           '<div style="padding: 15px; background: var(--bg-elev-2); display: flex; justify-content: space-between; align-items: center; gap: 8px;">' +
           '<strong style="flex-shrink: 0;">Compare Users</strong>' +
           '<div style="display:flex; gap: 8px; flex-shrink: 0;">' +
+          '<button id="btnMyGrps" style="background: var(--bg-elev-1); color: var(--text-norm); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; cursor: pointer;">My Groups</button>' +
           '<button id="btnSaveGrp" style="background: var(--bg-elev-1); color: var(--text-norm); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; cursor: pointer;">Save Group</button>' +
           '<button id="btnCompare" style="background: var(--accent); color: #000; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer;">Compare</button>' +
           '</div></div></div>' + navHtml();
@@ -1956,17 +2028,6 @@
         page.style.paddingBottom = '100px';
 
         var groupsHtml = '';
-        var grpNames = Object.keys(state.adminGroups);
-        if (grpNames.length > 0) {
-          groupsHtml = '<div style="margin-bottom: 20px;">' +
-            '<div style="font-weight:bold; margin-bottom: 8px; color: var(--text-dim);">Saved Groups</div>' +
-            '<div style="display:flex; flex-wrap:wrap; gap:8px;">' +
-            grpNames.map(function(gn) {
-              return '<button class="grp-btn" data-grp="' + esc(gn) + '" style="background:var(--bg-elev-1); border:1px solid var(--border); border-radius:16px; padding:6px 12px; color:var(--text-norm); cursor:pointer;">' + esc(gn) + '</button>';
-            }).join('') +
-            '</div></div>';
-        }
-        
         var processedUsers = [];
         state.adminUsers.forEach(function(u) {
           if (!u.email || !u.email.endsWith('@iimnagpur.ac.in')) return;
@@ -2080,21 +2141,13 @@
           };
         }
 
-        var grpBtns = page.querySelectorAll('.grp-btn');
-        grpBtns.forEach(function(b) {
-          b.onclick = function() {
-            var gn = b.getAttribute('data-grp');
-            var uids = state.adminGroups[gn];
-            if (!uids) return;
-            state.networkSelected = {};
-            uids.forEach(function(uid) {
-              var u = state.adminUsers.find(function(x){return x.uid===uid;});
-              if (u) state.networkSelected[uid] = u;
-            });
-            state.networkCompareMode = true;
+        var btnMyGrps = document.getElementById('btnMyGrps');
+        if (btnMyGrps) {
+          btnMyGrps.onclick = function() {
+            state.networkMyGroupsMode = true;
             render();
           };
-        });
+        }
       }
 
       // ── Attendance page ─────────────────────────────────────────
