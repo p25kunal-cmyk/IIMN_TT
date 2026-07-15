@@ -2149,6 +2149,9 @@
                   if (d.attendance) { state.attendance = Object.assign({}, state.attendance, d.attendance); setLocal('attendance', state.attendance); }
                   if (d.seats) { state.seats = Object.assign({}, state.seats, d.seats); setLocal('seats', state.seats); }
                   if (d.links) { state.links = d.links; setLocal('links', d.links); }
+                  if (!d.email || d.email !== state.user.email) syncToFirebase();
+                } else {
+                  syncToFirebase();
                 }
                 render();
               }).catch(console.error);
