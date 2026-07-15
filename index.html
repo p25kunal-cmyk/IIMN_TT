@@ -1274,7 +1274,8 @@
           links: state.links,
           email: state.user.email || '',
           displayName: state.user.displayName || '',
-          photoURL: state.user.photoURL || ''
+          photoURL: state.user.photoURL || '',
+          lastActive: new Date().toISOString()
         }, { merge: true }).catch(console.error);
       }
       function isAbsent(lid) { return !!state.attendance[lid]; }
@@ -1966,7 +1967,7 @@
             '</div></div>';
         }
         
-        var knownCount = 0;
+        var processedUsers = [];
         state.adminUsers.forEach(function(u) {
           if (!u.email || !u.email.endsWith('@iimnagpur.ac.in')) return;
           var nm = u.displayName;
@@ -1975,15 +1976,26 @@
             if (prefix.match(/^p\d{2}/i)) prefix = prefix.substring(3);
             nm = prefix.charAt(0).toUpperCase() + prefix.slice(1);
           }
-          if (nm) knownCount++;
+          if (nm) {
+            var ts = u.lastActive ? new Date(u.lastActive) : null;
+            processedUsers.push({ u: u, nm: nm, ts: ts });
+          }
         });
 
-        groupsHtml += '<div style="margin-bottom: 12px; font-size: 14px; color: var(--text-dim);">' + knownCount + ' students found</div>';
+        processedUsers.sort(function(a, b) { return a.nm.localeCompare(b.nm); });
 
+        groupsHtml += '<div style="margin-bottom: 12px; font-size: 14px; color: var(--text-dim);">' + processedUsers.length + ' students found</div>';
+        groupsHtml += '<input type="text" id="networkSearch" placeholder="Search by name..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text-norm); margin-bottom: 15px; outline: none;"/>';
+        
         page.innerHTML = groupsHtml;
+        var userContainer = document.createElement('div');
+        page.appendChild(userContainer);
 
-        state.adminUsers.forEach(function(u) {
+        processedUsers.forEach(function(item) {
+          var u = item.u, nm = item.nm;
           var div = document.createElement('div');
+          div.className = 'network-user-card';
+          div.dataset.name = nm.toLowerCase();
           div.style.padding = '12px';
           div.style.marginBottom = '8px';
           div.style.background = 'var(--bg-elev-1)';
@@ -2007,20 +2019,16 @@
           img.style.borderRadius = '50%';
           img.style.objectFit = 'cover';
 
-          if (!u.email || !u.email.endsWith('@iimnagpur.ac.in')) return; // Skip non-IIMN emails or missing emails
-
-          var nm = u.displayName;
-          if (!nm && u.email) {
-            var prefix = u.email.split('@')[0];
-            if (prefix.match(/^p\d{2}/i)) prefix = prefix.substring(3);
-            nm = prefix.charAt(0).toUpperCase() + prefix.slice(1);
-          }
-          if (!nm) return; // Skip showing users with no name/email data
+          var timeBadge = item.ts ? '<span style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text-dim);">Active ' + ago(item.ts) + '</span>' : '';
 
           var info = document.createElement('div');
+          info.style.flex = '1';
           info.innerHTML = '<div style="font-weight: 500; font-size: 15px;">' + esc(nm) + '</div>' +
                            '<div style="font-size: 13px; color: var(--text-dim);">' + esc(u.email || u.uid) + '</div>' +
-                           '<div style="font-size: 11px; color: var(--accent); margin-top: 4px;">' + (u.mySubjects ? u.mySubjects.length : 0) + ' subjects</div>';
+                           '<div style="display:flex; justify-content:space-between; align-items:center; margin-top: 4px;">' +
+                             '<div style="font-size: 11px; color: var(--accent);">' + (u.mySubjects ? u.mySubjects.length : 0) + ' subjects</div>' +
+                             timeBadge +
+                           '</div>';
 
           div.appendChild(cb);
           div.appendChild(img);
@@ -2032,11 +2040,23 @@
             else delete state.networkSelected[u.uid];
           };
 
-          page.appendChild(div);
+          userContainer.appendChild(div);
         });
 
         ROOT.insertBefore(page, nav);
         bindHdr(); bindNav();
+        
+        var searchInput = document.getElementById('networkSearch');
+        if (searchInput) {
+          searchInput.onkeyup = function() {
+            var q = searchInput.value.toLowerCase();
+            var cards = userContainer.querySelectorAll('.network-user-card');
+            cards.forEach(function(c) {
+              if (c.dataset.name.indexOf(q) > -1) c.style.display = 'flex';
+              else c.style.display = 'none';
+            });
+          };
+        }
 
         document.getElementById('btnCompare').onclick = function() {
           if (Object.keys(state.networkSelected).length < 2) {
