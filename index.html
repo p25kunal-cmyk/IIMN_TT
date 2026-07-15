@@ -1468,13 +1468,20 @@
           }
         };
       }
+      function setPage(p) {
+        if (currentPage !== p && typeof window.gtag === 'function') {
+          window.gtag('event', 'page_view', { page_path: '/' + p });
+        }
+        currentPage = p;
+        render();
+      }
       function bindNav() {
         var t = document.getElementById('navTT'), c = document.getElementById('navCal'), a = document.getElementById('navAT'), l = document.getElementById('navLinks'), n = document.getElementById('navNet');
-        if (t) t.onclick = function () { currentPage = 'timetable'; render(); };
-        if (c) c.onclick = function () { currentPage = 'calendar'; render(); };
-        if (a) a.onclick = function () { currentPage = 'attendance'; render(); };
-        if (l) l.onclick = function () { setLocal('seen-links', true); currentPage = 'links'; render(); };
-        if (n) n.onclick = function () { currentPage = 'network'; render(); };
+        if (t) t.onclick = function () { setPage('timetable'); };
+        if (c) c.onclick = function () { setPage('calendar'); };
+        if (a) a.onclick = function () { setPage('attendance'); };
+        if (l) l.onclick = function () { setLocal('seen-links', true); setPage('links'); };
+        if (n) n.onclick = function () { setPage('network'); };
       }
 
       // ── Timetable page ──────────────────────────────────────────
