@@ -1278,7 +1278,7 @@
           lastActive: new Date().toISOString()
         }, { merge: true }).catch(console.error);
       }
-      function isAbsent(lid) { return !!state.attendance[lid]; }
+      function isAbsent(lid) { return state.attendance[lid] === true; }
       function isLecturePast(e) {
         var now = new Date();
         if (e.end) return e.end <= now;
@@ -1296,7 +1296,8 @@
         return false;
       }
       function toggleAttendance(lid) {
-        if (state.attendance[lid]) delete state.attendance[lid]; else state.attendance[lid] = true;
+        // Store explicit true/false so Firebase (merge:true) always overwrites correctly
+        state.attendance[lid] = state.attendance[lid] === true ? false : true;
         setLocal('attendance', state.attendance);
         syncToFirebase();
       }
@@ -2314,7 +2315,13 @@
                 if (docSnap.exists()) {
                   var d = docSnap.data();
                   if (d.mySubjects) { state.mySubjects = d.mySubjects; setLocal('my-subjects', d.mySubjects); }
-                  if (d.attendance) { state.attendance = Object.assign({}, state.attendance, d.attendance); setLocal('attendance', state.attendance); }
+                  if (d.attendance) {
+                    // Firebase attendance values: true = absent, false = present (explicit)
+                    // Local state takes precedence for keys already set; Firebase fills in the rest
+                    var merged = Object.assign({}, d.attendance, state.attendance);
+                    state.attendance = merged;
+                    setLocal('attendance', state.attendance);
+                  }
                   if (d.seats) { state.seats = Object.assign({}, state.seats, d.seats); setLocal('seats', state.seats); }
                   if (d.links) { state.links = d.links; setLocal('links', d.links); }
                   if (!d.email || d.email !== state.user.email) syncToFirebase();
