@@ -1344,6 +1344,10 @@
             var range = parseSlotRange(sh);
             var lines = cell.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
             if (!lines.length) return;
+            // Check for inline bracket timing override (e.g. Independence Day DDM classes)
+            var overrideRange = parseCellOverrideRange(lines);
+            var effectiveRange = overrideRange || range;
+            var effectiveSh = overrideRange ? overrideRange.label : sh;
             var cl = lines.filter(function (l) { return parseLine(l) !== null; });
             if (!cl.length) {
               events.push({
@@ -1355,11 +1359,13 @@
             cl.forEach(function (line) {
               var p = parseLine(line); if (!mySet[p.key]) return;
               events.push({
-                type: 'class', date: row.date, day: row.day, slotIndex: idx, slotHeader: sh,
+                type: 'class', date: row.date, day: row.day, slotIndex: idx,
+                slotHeader: effectiveSh,
                 subject: p.subject, section: p.section, room: p.room, key: p.key, week: p.week,
                 lectureId: p.key + ':' + p.week,
                 cancelled: p.cancelled,
-                start: range ? dtr(row.date, range.start) : null, end: range ? dtr(row.date, range.end) : null
+                start: effectiveRange ? dtr(row.date, effectiveRange.start) : null,
+                end: effectiveRange ? dtr(row.date, effectiveRange.end) : null
               });
             });
           });
@@ -1376,6 +1382,18 @@
         var m = h.match(/(\d{1,2})\.(\d{2})\s*-+\s*(\d{1,2})\.(\d{2})/);
         if (!m) return null;
         return { start: m[1].padStart(2, '0') + ':' + m[2], end: m[3].padStart(2, '0') + ':' + m[4] };
+      }
+      // Extract an inline bracket timing override from cell lines, e.g. "(14.00--15.30)"
+      function parseCellOverrideRange(lines) {
+        for (var i = 0; i < lines.length; i++) {
+          var m = lines[i].match(/^\(?\s*(\d{1,2})\.(\d{2})\s*-+\s*(\d{1,2})\.(\d{2})\s*\)?$/);
+          if (m) {
+            var startStr = m[1].padStart(2, '0') + ':' + m[2];
+            var endStr   = m[3].padStart(2, '0') + ':' + m[4];
+            return { start: startStr, end: endStr, label: startStr + ' – ' + endStr };
+          }
+        }
+        return null;
       }
       function dtr(ds, hhmm) {
         var p = ds.split('-'); if (p.length !== 3) return null;
