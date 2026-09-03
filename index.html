@@ -1373,6 +1373,14 @@
           });
       }
 
+      // Known cancelled / rescheduled classes from sheet where formatting was not exportable as plain text
+      var KNOWN_CANCELLED = {
+        '28-Jul-2026:FSA:10': true,
+        '30-Jul-2026:CV-A:10': true,
+        '30-Jul-2026:CV-B:10': true,
+        '13-Aug-2026:MFSM:15': true
+      };
+
       // ── Events ─────────────────────────────────────────────────
       function buildEvents() {
         if (!getActive().data) return [];
@@ -1399,12 +1407,13 @@
             }
             cl.forEach(function (line) {
               var p = parseLine(line); if (!mySet[p.key]) return;
+              var isCanc = p.cancelled || !!KNOWN_CANCELLED[row.date + ':' + p.key + ':' + p.week];
               events.push({
                 type: 'class', date: row.date, day: row.day, slotIndex: idx,
                 slotHeader: effectiveSh,
                 subject: p.subject, section: p.section, room: p.room, key: p.key, week: p.week,
                 lectureId: p.key + ':' + p.week,
-                cancelled: p.cancelled,
+                cancelled: isCanc,
                 start: effectiveRange ? dtr(row.date, effectiveRange.start) : null,
                 end: effectiveRange ? dtr(row.date, effectiveRange.end) : null
               });
@@ -2235,7 +2244,13 @@
         } else {
           var events = buildEvents();
           page.innerHTML = getActive().mySubjects.map(function (key) {
-            var lecs = events.filter(function (e) { return e.type === 'class' && e.key === key; });
+            var lecs = events.filter(function (e) { return e.type === 'class' && e.key === key && !e.cancelled; });
+            var seenWeeks = {};
+            lecs = lecs.filter(function (e) {
+              if (seenWeeks[e.week]) return false;
+              seenWeeks[e.week] = true;
+              return true;
+            });
             lecs.sort(function (a, b) { return (parseInt(a.week) || 0) - (parseInt(b.week) || 0); });
             var pastLecs = lecs.filter(function (e) { return isLecturePast(e); });
             var abCnt = pastLecs.filter(function (e) { return isAbsent(e.lectureId); }).length;
