@@ -1,5 +1,10 @@
 export async function onRequest(context) {
-  const EXEC_URL = 'https://script.google.com/macros/s/AKfycbynFmcsk5S2ImeQEphSdfsonAHpeMrh1MtXOqP7D72DLOJGLPKMPz_XvAxCkfJEQtsgMQ/exec?action=data';
+  const BASE_URL = 'https://script.google.com/a/macros/iimnagpur.ac.in/s/AKfycbwqaKOCa597wRpWy1ywlCDPHpoQgAC3n0AsurAUjgLeIDRU0M9nwRpgW_IhKm6gvpT8sA/exec?action=data';
+
+  // Forward the `term` query parameter (default: 4)
+  const url = new URL(context.request.url);
+  const term = url.searchParams.get('term') || '4';
+  const EXEC_URL = BASE_URL + '&term=' + encodeURIComponent(term);
 
   const headers = new Headers({
     'Access-Control-Allow-Origin': '*',
@@ -49,3 +54,4 @@ export async function onRequest(context) {
     });
   }
 }
+

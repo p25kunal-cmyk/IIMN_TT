@@ -342,7 +342,7 @@
 
     /* Days */
     .days {
-      padding: 4px 16px 0;
+      padding: 4px 16px 80px;
     }
 
     .day-card {
@@ -1229,12 +1229,25 @@
         '#c45c7a','#52b5a3','#e06060','#7aad5a','#a07fbf'
       ];
       var _colorMap = {};
+      // Returns the number of columns that are actual timetable time-slots
+      // (i.e. headers like "08.30 -- 10.00"). Columns beyond this are
+      // metadata (seat capacity, course info, faculty, etc.) and must be ignored.
+      function getSlotCount() {
+        if (!getActive().data || !getActive().data.slotHeaders) return 8; // safe default
+        var headers = getActive().data.slotHeaders;
+        var count = 0;
+        for (var i = 0; i < headers.length; i++) {
+          if (/\d{1,2}\.\d{2}\s*-/.test(headers[i])) count = i + 1;
+        }
+        return count || 8;
+      }
       function buildColorMap() {
         _colorMap = {};
-        if (!state.data) return;
+        if (!getActive().data) return;
         var subjects = [];
-        state.data.rows.forEach(function(r) {
-          r.cells.forEach(function(c) {
+        var slotCount = getSlotCount();
+        getActive().data.rows.forEach(function(r) {
+          r.cells.slice(0, slotCount).forEach(function(c) {
             c.split('\n').forEach(function(l) {
               var p = parseLine(l);
               if (p && subjects.indexOf(p.subject) === -1) subjects.push(p.subject);
@@ -1254,23 +1267,46 @@
         var isCancelled = /cancel/i.test(line) || /[\u0336\u0335]/.test(line);
         var c = line.replace(/[\u0336\u0335]/g, '').replace(/\(?cancelled\)?/ig, '').trim().replace(/\s+/g, '');
         if (!c) return null;
-        var m = c.match(/^([A-Z]+)-([A-Z])\/(\d+)\/(.+)$/i);
-        if (m) return { key: (m[1] + '-' + m[2]).toUpperCase(), subject: m[1].toUpperCase(), section: m[2].toUpperCase(), week: m[3], room: m[4], cancelled: isCancelled };
+        // Format 1: SUB-SEC/WEEK/ROOM (Term 4 format, e.g. FIN-A/12/Room 1)
+        var m1 = c.match(/^([A-Z]+)-([A-Z])\/(\d+)\/(.+)$/i);
+        if (m1) return { key: (m1[1] + '-' + m1[2]).toUpperCase(), subject: m1[1].toUpperCase(), section: m1[2].toUpperCase(), week: m1[3], room: m1[4], cancelled: isCancelled };
+        
+        // Format 2: SUB/WEEK/ROOM (Term 4 format, e.g. FIN/12/Room 1)
         var m2 = c.match(/^([A-Z]+)\/(\d+)\/(.+)$/i);
         if (m2) return { key: m2[1].toUpperCase(), subject: m2[1].toUpperCase(), section: '', week: m2[2], room: m2[3], cancelled: isCancelled };
+
+        // Format 3: SUB-SEC/ROOM/WEEK (Term 5 format, e.g. SM-B/CR-01/1)
+        var m3 = c.match(/^([A-Z]+)-([A-Z])\/(.+)\/(\d+)$/i);
+        if (m3) return { key: (m3[1] + '-' + m3[2]).toUpperCase(), subject: m3[1].toUpperCase(), section: m3[2].toUpperCase(), week: m3[4], room: m3[3], cancelled: isCancelled };
+
+        // Format 4: SUB/ROOM/WEEK (Term 5 format, e.g. CIMA/CR-01/1)
+        var m4 = c.match(/^([A-Z]+)\/(.+)\/(\d+)$/i);
+        if (m4) return { key: m4[1].toUpperCase(), subject: m4[1].toUpperCase(), section: '', week: m4[3], room: m4[2], cancelled: isCancelled };
+
         return null;
       }
 
-      var state = { data: null, mySubjects: [], attendance: {}, seats: {}, links: [], lastFetch: null, fetchError: null, fetching: false, user: null, authInitialized: false, adminUsers: null, networkCompareMode: false, networkMyGroupsMode: false, networkSelected: {}, adminGroups: {} };
+      var activeTerm = getLocal('activeTerm') || 'term4';
+      var state = { 
+        term4: { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false },
+        term5: { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false },
+        links: [], user: null, authInitialized: false, adminUsers: null, networkCompareMode: false, networkMyGroupsMode: false, networkSelected: {}, adminGroups: {} 
+      };
+      
+      // Getters for active term to minimize code changes
+      function getActive() { return state[activeTerm]; }
       function getLocal(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
       function setLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
       
       function syncToFirebase() {
         if (!state.user) return;
         window.fbSetDoc(window.fbDoc(window.fbDb, "users", state.user.uid), {
-          mySubjects: state.mySubjects,
-          attendance: state.attendance,
-          seats: state.seats,
+          mySubjects: state.term4.mySubjects,
+          attendance: state.term4.attendance,
+          seats: state.term4.seats,
+          term5MySubjects: state.term5.mySubjects,
+          term5Attendance: state.term5.attendance,
+          term5Seats: state.term5.seats,
           links: state.links,
           email: state.user.email || '',
           displayName: state.user.displayName || '',
@@ -1278,7 +1314,7 @@
           lastActive: new Date().toISOString()
         }, { merge: true }).catch(console.error);
       }
-      function isAbsent(lid) { return state.attendance[lid] === true; }
+      function isAbsent(lid) { return getActive().attendance[lid] === true; }
       function isLecturePast(e) {
         var now = new Date();
         if (e.end) return e.end <= now;
@@ -1296,9 +1332,8 @@
         return false;
       }
       function toggleAttendance(lid) {
-        // Store explicit true/false so Firebase (merge:true) always overwrites correctly
-        state.attendance[lid] = state.attendance[lid] === true ? false : true;
-        setLocal('attendance', state.attendance);
+        getActive().attendance[lid] = getActive().attendance[lid] === true ? false : true;
+        setLocal('attendance-' + activeTerm, getActive().attendance);
         syncToFirebase();
       }
 
@@ -1312,35 +1347,41 @@
 
       // ── Fetch ──────────────────────────────────────────────────
       function fetchData(silent) {
-        state.fetching = true;
+        // Fetch for both terms
+        fetchTermData('term4', '4', silent);
+        fetchTermData('term5', '5', silent);
+      }
+      function fetchTermData(termKey, termParam, silent) {
+        state[termKey].fetching = true;
         if (!silent) render();
-        fetch('/api/timetable?t=' + Date.now())
+        fetch('/api/timetable?term=' + termParam + '&t=' + Date.now())
           .then(function (r) {
             if (!r.ok) return r.json().catch(function () { return { error: 'http_' + r.status }; });
             return r.json();
           })
           .then(function (json) {
-            if (json && json.error === 'auth') { state.fetchError = 'auth'; }
-            else if (json && json.error) { if (!silent || !state.data) state.fetchError = json.message || json.error; }
-            else { state.data = json; state.lastFetch = new Date(); state.fetchError = null; setLocal('cached-timetable', json); setLocal('cached-time', new Date().toISOString()); }
-            state.fetching = false; render();
+            if (json && json.error === 'auth') { state[termKey].fetchError = 'auth'; }
+            else if (json && json.error) { if (!silent || !state[termKey].data) state[termKey].fetchError = json.message || json.error; }
+            else { state[termKey].data = json; state[termKey].lastFetch = new Date(); state[termKey].fetchError = null; setLocal('cached-timetable-' + termKey, json); setLocal('cached-time-' + termKey, new Date().toISOString()); }
+            state[termKey].fetching = false; render();
           })
           .catch(function (e) {
-            var cached = getLocal('cached-timetable');
-            if (cached && !state.data) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
-            if (!silent || !state.data) state.fetchError = (e && e.message) || 'Could not load timetable';
-            state.fetching = false; render();
+            var cached = getLocal('cached-timetable-' + termKey);
+            if (cached && !state[termKey].data) { state[termKey].data = cached; var ct = getLocal('cached-time-' + termKey); state[termKey].lastFetch = ct ? new Date(ct) : null; }
+            if (!silent || !state[termKey].data) state[termKey].fetchError = (e && e.message) || 'Could not load timetable';
+            state[termKey].fetching = false; render();
           });
       }
 
       // ── Events ─────────────────────────────────────────────────
       function buildEvents() {
-        if (!state.data) return [];
-        var mySet = {}; state.mySubjects.forEach(function (k) { mySet[k] = true; });
+        if (!getActive().data) return [];
+        var mySet = {}; getActive().mySubjects.forEach(function (k) { mySet[k] = true; });
         var events = [];
-        state.data.rows.forEach(function (row) {
-          row.cells.forEach(function (cell, idx) {
-            var sh = state.data.slotHeaders[idx] || '';
+        var slotCount = getSlotCount();
+        getActive().data.rows.forEach(function (row) {
+          row.cells.slice(0, slotCount).forEach(function (cell, idx) {
+            var sh = getActive().data.slotHeaders[idx] || '';
             var range = parseSlotRange(sh);
             var lines = cell.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
             if (!lines.length) return;
@@ -1374,8 +1415,9 @@
       }
 
       function getAllKeys() {
-        if (!state.data) return [];
-        var f = {}; state.data.rows.forEach(function (r) { r.cells.forEach(function (c) { c.split('\n').forEach(function (l) { var p = parseLine(l); if (p) f[p.key] = true; }); }); });
+        if (!getActive().data) return [];
+        var slotCount = getSlotCount();
+        var f = {}; getActive().data.rows.forEach(function (r) { r.cells.slice(0, slotCount).forEach(function (c) { c.split('\n').forEach(function (l) { var p = parseLine(l); if (p) f[p.key] = true; }); }); });
         return Object.keys(f).sort();
       }
       function parseSlotRange(h) {
@@ -1422,9 +1464,9 @@
         if (!state.authInitialized) return renderLoading();
         if (state.authInitialized && !state.user) return renderLogin();
 
-        if (state.fetchError === 'auth' && !state.data) return renderError('auth');
-        if (state.fetchError && !state.data) return renderError(state.fetchError);
-        if (!state.data) return renderLoading();
+        if (getActive().fetchError === 'auth' && !getActive().data) return renderError('auth');
+        if (getActive().fetchError && !getActive().data) return renderError(getActive().fetchError);
+        if (!getActive().data) return renderLoading();
         buildColorMap(); // assign unique colors to subjects before any page renders
         if (currentPage === 'attendance') return renderAttendance();
         if (currentPage === 'calendar') return renderCalendar();
@@ -1446,9 +1488,14 @@
           '<button class="icon-btn" id="btnDark" title="Toggle Dark Mode">' + (darkMode ? '☀️' : '🌙') + '</button>' +
           '<button class="icon-btn" id="btnInstall" title="Install App">📲</button>' +
           '<button class="icon-btn" id="btnSubjects" title="My Subjects">📚</button>' +
-          '<button class="icon-btn' + (state.fetching ? ' spinning' : '') + '" id="btnRefresh">' +
+          '<button class="icon-btn' + (getActive().fetching ? ' spinning' : '') + '" id="btnRefresh">' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>' +
           '</button>' +
+          '</div></div>' + 
+          '<div style="display:flex; justify-content:center; padding: 0 16px 8px;">' +
+          '<div style="display:inline-flex; background:var(--bg-elev-2); border-radius:8px; padding:2px; border:1px solid var(--border);">' +
+          '<button id="btnTerm4" style="background:' + (activeTerm==='term4'?'var(--bg-elev)':'transparent') + '; border:' + (activeTerm==='term4'?'1px solid var(--border)':'1px solid transparent') + '; box-shadow:' + (activeTerm==='term4'?'0 1px 3px rgba(0,0,0,0.1)':'none') + '; padding: 4px 16px; border-radius:6px; font-family:var(--font-display); font-weight:700; font-size:13px; color:' + (activeTerm==='term4'?'var(--text)':'var(--text-dim)') + '; cursor:pointer; transition:all 0.2s;">Term 4</button>' +
+          '<button id="btnTerm5" style="background:' + (activeTerm==='term5'?'var(--bg-elev)':'transparent') + '; border:' + (activeTerm==='term5'?'1px solid var(--border)':'1px solid transparent') + '; box-shadow:' + (activeTerm==='term5'?'0 1px 3px rgba(0,0,0,0.1)':'none') + '; padding: 4px 16px; border-radius:6px; font-family:var(--font-display); font-weight:700; font-size:13px; color:' + (activeTerm==='term5'?'var(--text)':'var(--text-dim)') + '; cursor:pointer; transition:all 0.2s;">Term 5</button>' +
           '</div></div>';
       }
 
@@ -1465,9 +1512,9 @@
       }
 
       function syncHtml() {
-        var ok = !state.fetchError;
+        var ok = !getActive().fetchError;
         return '<div class="sync-row"><span class="sync-dot' + (ok ? '' : ' err') + '"></span>' +
-          '<span>' + (ok ? 'Synced ' + ago(state.lastFetch) : 'Sync failed · showing last data') + '</span></div>';
+          '<span>' + (ok ? 'Synced ' + ago(getActive().lastFetch) : 'Sync failed · showing last data') + '</span></div>';
       }
 
       function bindHdr() {
@@ -1487,6 +1534,10 @@
             window.fbSignInWithPopup(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
           }
         };
+        var btnT4 = document.getElementById('btnTerm4');
+        var btnT5 = document.getElementById('btnTerm5');
+        if (btnT4) btnT4.onclick = function() { activeTerm = 'term4'; setLocal('activeTerm', 'term4'); render(); };
+        if (btnT5) btnT5.onclick = function() { activeTerm = 'term5'; setLocal('activeTerm', 'term5'); render(); };
       }
       function setPage(p) {
         if (currentPage !== p && typeof window.gtag === 'function') {
@@ -1508,7 +1559,7 @@
       function renderTimetable() {
         var events = buildEvents(), nn = getNowNext(events), td = todayStr();
         ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '<div id="tick-update">' + syncHtml() + boardHtml(nn) + '</div></div>' +
-          (state.mySubjects.length === 0
+          (getActive().mySubjects.length === 0
             ? '<div class="empty-state">No subjects selected.<br><br>Tap <b>📚</b> to pick yours.</div>'
             : '<div class="days">' + daysHtml(events, td) + '</div>') +
           navHtml();
@@ -1525,7 +1576,11 @@
           if (row) row.className = 'slot-row' + (ab ? ' absent-row' : '');
         });
         var tc = ROOT.querySelector('.day-card.today');
-        if (tc) setTimeout(function () { tc.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
+        if (tc) {
+          setTimeout(function () { tc.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
+        } else {
+          setTimeout(function () { window.scrollTo({ top: 0, behavior: 'smooth' }); }, 50);
+        }
       }
 
       function boardHtml(nn) { return '<div class="board">' + bCard(nn.current, true) + bCard(nn.next, false) + '</div>'; }
@@ -1534,7 +1589,7 @@
         if (!ev) return '<div class="board-card' + (isNow ? ' now' : '') + '"><div class="board-label">' + lbl + '</div><div class="board-empty">' + (isNow ? 'No class right now' : 'Nothing else today') + '</div></div>';
         var col = ev.cancelled ? 'var(--danger)' : colorFor(ev.subject);
         var meta = isNow ? fmt(ev.start) + ' – ' + fmt(ev.end) : fmt(ev.start) + ' · ' + until(ev.start);
-        var seat = state.seats[ev.key];
+        var seat = getActive().seats[ev.key];
         var seatHtml = seat ? '<span class="seat-badge">🪑 ' + esc(seat) + '</span>' : '';
         return '<div class="board-card' + (isNow ? ' now' : '') + '">' +
           '<div class="board-pill" style="background:' + col + '"></div>' +
@@ -1546,16 +1601,16 @@
 
       function daysHtml(events, td) {
         var order = [], byDate = {};
-        state.data.rows.forEach(function (r) { if (!byDate[r.date]) { byDate[r.date] = []; order.push(r.date); } });
+        getActive().data.rows.forEach(function (r) { if (!byDate[r.date]) { byDate[r.date] = []; order.push(r.date); } });
         events.forEach(function (e) { byDate[e.date].push(e); });
         return order.map(function (date) {
           var evs = byDate[date].slice().sort(function (a, b) { return a.slotIndex - b.slotIndex; });
-          var r = state.data.rows.find(function (x) { return x.date === date; });
+          var r = getActive().data.rows.find(function (x) { return x.date === date; });
           var isToday = date === td;
           var body = !evs.length ? '<div class="empty-day">No classes for your subjects</div>' : evs.map(function (e) {
             if (e.type === 'info') return '<div class="slot-row"><div class="slot-time">' + esc(e.slotHeader) + '</div><div class="slot-main"><div class="info-line">' + esc(e.text) + '</div></div></div>';
             var col = e.cancelled ? 'var(--danger)' : colorFor(e.subject), ab = isAbsent(e.lectureId), lid = e.lectureId.replace(/"/g, '');
-            var seat = state.seats[e.key];
+            var seat = getActive().seats[e.key];
             var seatHtml = seat ? '<span class="seat-badge" style="margin-left:6px;">🪑 ' + esc(seat) + '</span>' : '';
             return '<div class="slot-row' + (ab ? ' absent-row' : '') + '">' +
               '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
@@ -1618,7 +1673,7 @@
         if (calSelectedDate) {
           var dayEvents = events.filter(function (e) { return e.date === calSelectedDate; })
             .sort(function (a, b) { return a.slotIndex - b.slotIndex; });
-          var row = state.data.rows.find(function (r) { return r.date === calSelectedDate; });
+          var row = getActive().data.rows.find(function (r) { return r.date === calSelectedDate; });
           var slots = !dayEvents.length
             ? '<div class="empty-day">No classes for your subjects</div>'
             : dayEvents.map(function (e) {
@@ -1827,14 +1882,15 @@
       }
 
       function buildGroupEvents() {
-        if (!state.data) return [];
+        if (!getActive().data) return [];
         var selectedIds = Object.keys(state.networkSelected);
         if (!selectedIds.length) return [];
         
         var events = [];
-        state.data.rows.forEach(function (row) {
-          row.cells.forEach(function (cell, idx) {
-            var sh = state.data.slotHeaders[idx] || '';
+        var slotCount = getSlotCount();
+        getActive().data.rows.forEach(function (row) {
+          row.cells.slice(0, slotCount).forEach(function (cell, idx) {
+            var sh = getActive().data.slotHeaders[idx] || '';
             var range = parseSlotRange(sh);
             var lines = cell.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
             if (!lines.length) return;
@@ -1884,7 +1940,7 @@
 
       function groupDaysHtml(events, td) {
         var order = [], byDate = {};
-        state.data.rows.forEach(function (r) { if (!byDate[r.date]) { byDate[r.date] = []; order.push(r.date); } });
+        getActive().data.rows.forEach(function (r) { if (!byDate[r.date]) { byDate[r.date] = []; order.push(r.date); } });
         events.forEach(function (e) { byDate[e.date].push(e); });
         
         order = order.filter(function(d) { return !isLecturePast({date: d}); });
@@ -1901,7 +1957,7 @@
         var html = order.map(function (date) {
           var evs = byDate[date].slice().sort(function (a, b) { return a.slotIndex - b.slotIndex; });
           if (!evs.length) return '';
-          var r = state.data.rows.find(function (x) { return x.date === date; });
+          var r = getActive().data.rows.find(function (x) { return x.date === date; });
           var isToday = date === td;
           var body = evs.map(function (e) {
             var col = e.isFree ? 'var(--success)' : 'var(--danger)';
@@ -2174,11 +2230,11 @@
         ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' + navHtml();
         var nav = ROOT.querySelector('.bottom-nav');
         var page = document.createElement('div'); page.className = 'att-page';
-        if (!state.mySubjects.length) {
+        if (!getActive().mySubjects.length) {
           page.innerHTML = '<div class="empty-state">No subjects selected.<br>Tap <b>📚</b> to pick yours.</div>';
         } else {
           var events = buildEvents();
-          page.innerHTML = state.mySubjects.map(function (key) {
+          page.innerHTML = getActive().mySubjects.map(function (key) {
             var lecs = events.filter(function (e) { return e.type === 'class' && e.key === key; });
             lecs.sort(function (a, b) { return (parseInt(a.week) || 0) - (parseInt(b.week) || 0); });
             var pastLecs = lecs.filter(function (e) { return isLecturePast(e); });
@@ -2246,13 +2302,13 @@
             ? '<button class="btn btn-primary" id="btnSignIn">Sign in with Google</button>'
             : '<button class="btn btn-primary" id="btnRetry">Try Again</button>') +
           '</div>';
-        if (isAuth) document.getElementById('btnSignIn').onclick = function () { window.open('https://script.google.com/a/macros/iimnagpur.ac.in/s/AKfycbxBxonDpBgnWDV-vChOuysOLA8WgjE0dZ6Fpl1FAPE9ju3WldBRdqWnXlqDQf2a4_Y31A/exec', '_blank'); setTimeout(function () { fetchData(); }, 3000); };
+        if (isAuth) document.getElementById('btnSignIn').onclick = function () { window.open('https://script.google.com/a/macros/iimnagpur.ac.in/s/AKfycbwknbo9QcsiXEmlbeBVL-AQBI9BRxsmMvHxKZfCS5E5ivURLLZA1BCU_95hNwn1EzCNzg/exec', '_blank'); setTimeout(function () { fetchData(); }, 3000); };
         else document.getElementById('btnRetry').onclick = function () { fetchData(); };
       }
 
       // ── Subject picker ──────────────────────────────────────────
       function openPicker() {
-        var keys = getAllKeys(), selected = state.mySubjects.slice();
+        var keys = getAllKeys(), selected = getActive().mySubjects.slice();
         var ov = document.createElement('div'); ov.className = 'overlay';
         ov.innerHTML = '<div class="sheet"><div class="sheet-head"><h2>📚 My Subjects &amp; Sections</h2><button class="icon-btn" id="closePkr">✕</button></div>' +
           '<div class="sheet-body"><input type="search" id="pkrSearch" placeholder="Search e.g. DDM, BM…"><div class="toplinks"><span id="selAll">Select all</span><span id="clrAll">Clear all</span></div><div class="chip-list" id="chipList"></div></div>' +
@@ -2265,7 +2321,7 @@
           if (!items.length) { el.innerHTML = '<div style="padding:10px;color:var(--text-dim)">No matches</div>'; return; }
           el.innerHTML = items.map(function (k) {
             var p = k.split('-'), sub = p[0], sec = p[1] || '', col = colorFor(sub), chk = selected.indexOf(k) !== -1 ? 'checked' : '';
-            var seat = state.seats[k] || '';
+            var seat = getActive().seats[k] || '';
             var seatInput = '<input type="number" class="seat-input ' + (chk ? '' : 'hidden') + '" data-key="' + k + '" placeholder="Seat" value="' + esc(seat) + '">';
             return '<div class="chip-item"><label><input type="checkbox" value="' + k + '" ' + chk + '><span class="chip-dot" style="background:' + col + '"></span><span class="chip-sub">' + esc(sub) + '</span>' + (sec ? '<span class="chip-sec">Section ' + esc(sec) + '</span>' : '<span class="chip-sec">(no section)</span>') + '</label>' + seatInput + '</div>';
           }).join('');
@@ -2279,8 +2335,8 @@
           });
           el.querySelectorAll('.seat-input').forEach(function(si) {
             si.oninput = function() {
-              if (si.value) state.seats[si.getAttribute('data-key')] = si.value;
-              else delete state.seats[si.getAttribute('data-key')];
+              if (si.value) getActive().seats[si.getAttribute('data-key')] = si.value;
+              else delete getActive().seats[si.getAttribute('data-key')];
             };
           });
         }
@@ -2289,7 +2345,7 @@
         document.getElementById('selAll').onclick = function () { selected = keys.slice(); draw(document.getElementById('pkrSearch').value); };
         document.getElementById('clrAll').onclick = function () { selected = []; draw(document.getElementById('pkrSearch').value); };
         document.getElementById('closePkr').onclick = function () { ov.remove(); };
-        document.getElementById('saveSub').onclick = function () { state.mySubjects = selected; setLocal('my-subjects', selected); setLocal('seats', state.seats); syncToFirebase(); ov.remove(); render(); };
+        document.getElementById('saveSub').onclick = function () { getActive().mySubjects = selected; setLocal('my-subjects-' + activeTerm, selected); setLocal('seats-' + activeTerm, getActive().seats); syncToFirebase(); ov.remove(); render(); };
       }
 
       // ── Install ─────────────────────────────────────────────────
@@ -2311,13 +2367,26 @@
       // ── Init ──────────────────────────────────────────────
       function init() {
         var dm = getLocal('dark-mode'); if (dm) applyTheme(true);
-        var sub = getLocal('my-subjects'); if (sub) state.mySubjects = sub;
-        var att = getLocal('attendance'); if (att) state.attendance = att;
-        var sts = getLocal('seats'); if (sts) state.seats = sts;
+        var sub4 = getLocal('my-subjects'); if (sub4) state.term4.mySubjects = sub4; // legacy fallback
+        var sub4n = getLocal('my-subjects-term4'); if (sub4n) state.term4.mySubjects = sub4n;
+        var sub5 = getLocal('my-subjects-term5'); if (sub5) state.term5.mySubjects = sub5;
+        
+        var att4 = getLocal('attendance'); if (att4) state.term4.attendance = att4; // legacy fallback
+        var att4n = getLocal('attendance-term4'); if (att4n) state.term4.attendance = att4n;
+        var att5 = getLocal('attendance-term5'); if (att5) state.term5.attendance = att5;
+
+        var sts4 = getLocal('seats'); if (sts4) state.term4.seats = sts4; // legacy fallback
+        var sts4n = getLocal('seats-term4'); if (sts4n) state.term4.seats = sts4n;
+        var sts5 = getLocal('seats-term5'); if (sts5) state.term5.seats = sts5;
+
         var lnks = getLocal('links'); if (lnks) state.links = lnks;
         var grps = getLocal('admin-groups'); if (grps) state.adminGroups = grps;
-        var cached = getLocal('cached-timetable');
-        if (cached) { state.data = cached; var ct = getLocal('cached-time'); state.lastFetch = ct ? new Date(ct) : null; }
+        
+        var cached4 = getLocal('cached-timetable') || getLocal('cached-timetable-term4');
+        if (cached4) { state.term4.data = cached4; var ct4 = getLocal('cached-time') || getLocal('cached-time-term4'); state.term4.lastFetch = ct4 ? new Date(ct4) : null; }
+        
+        var cached5 = getLocal('cached-timetable-term5');
+        if (cached5) { state.term5.data = cached5; var ct5 = getLocal('cached-time-term5'); state.term5.lastFetch = ct5 ? new Date(ct5) : null; }
         
         // ── Normal Firebase auth ──
           window.fbOnAuthStateChanged(window.fbAuth, function(user) {
@@ -2332,15 +2401,22 @@
               window.fbGetDoc(window.fbDoc(window.fbDb, "users", user.uid)).then(function(docSnap) {
                 if (docSnap.exists()) {
                   var d = docSnap.data();
-                  if (d.mySubjects) { state.mySubjects = d.mySubjects; setLocal('my-subjects', d.mySubjects); }
+                  if (d.mySubjects) { state.term4.mySubjects = d.mySubjects; setLocal('my-subjects-term4', d.mySubjects); }
+                  if (d.term5MySubjects) { state.term5.mySubjects = d.term5MySubjects; setLocal('my-subjects-term5', d.term5MySubjects); }
+                  
                   if (d.attendance) {
-                    // Firebase attendance values: true = absent, false = present (explicit)
-                    // Local state takes precedence for keys already set; Firebase fills in the rest
-                    var merged = Object.assign({}, d.attendance, state.attendance);
-                    state.attendance = merged;
-                    setLocal('attendance', state.attendance);
+                    var merged = Object.assign({}, d.attendance, state.term4.attendance);
+                    state.term4.attendance = merged;
+                    setLocal('attendance-term4', state.term4.attendance);
                   }
-                  if (d.seats) { state.seats = Object.assign({}, state.seats, d.seats); setLocal('seats', state.seats); }
+                  if (d.term5Attendance) {
+                    var merged5 = Object.assign({}, d.term5Attendance, state.term5.attendance);
+                    state.term5.attendance = merged5;
+                    setLocal('attendance-term5', state.term5.attendance);
+                  }
+
+                  if (d.seats) { state.term4.seats = Object.assign({}, state.term4.seats, d.seats); setLocal('seats-term4', state.term4.seats); }
+                  if (d.term5Seats) { state.term5.seats = Object.assign({}, state.term5.seats, d.term5Seats); setLocal('seats-term5', state.term5.seats); }
                   if (d.links) { state.links = d.links; setLocal('links', d.links); }
                   if (!d.email || d.email !== state.user.email) syncToFirebase();
                 } else {
@@ -2356,7 +2432,7 @@
           render();
           fetchData();
 
-        setInterval(function () { if (state.data && currentPage === 'timetable') updateTick(); }, 15000);
+        setInterval(function () { if (getActive().data && currentPage === 'timetable') updateTick(); }, 15000);
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () { });
       }
       
