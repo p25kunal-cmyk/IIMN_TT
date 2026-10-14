@@ -24,9 +24,9 @@ const MIME = {
 };
 
 async function proxyTimetable(req, res) {
-  // Forward the `term` query parameter (default: 4)
+  // Forward the `term` query parameter (default: 5)
   const reqUrl = new URL(req.url, `http://localhost:${PORT}`);
-  const term = reqUrl.searchParams.get('term') || '4';
+  const term = reqUrl.searchParams.get('term') || '5';
   const EXEC_URL = BASE_EXEC_URL + '&term=' + encodeURIComponent(term);
 
   function followRedirects(url, maxRedirects, cb) {

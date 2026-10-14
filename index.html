@@ -1265,30 +1265,32 @@
       function parseLine(line) {
         if (!line || typeof line !== 'string') return null;
         var isCancelled = /cancel/i.test(line) || /[\u0336\u0335]/.test(line);
-        var c = line.replace(/[\u0336\u0335]/g, '').replace(/\(?cancelled\)?/ig, '').trim().replace(/\s+/g, '');
+        // Strip timing in parentheses e.g. "(16:15 - 17:15)"
+        var cleaned = line.replace(/\([^)]*\d+[:.]\d+[^)]*\)/g, '');
+        var c = cleaned.replace(/[\u0336\u0335]/g, '').replace(/\(?cancelled\)?/ig, '').trim().replace(/\s+/g, '');
         if (!c) return null;
-        // Format 1: SUB-SEC/WEEK/ROOM (Term 4 format, e.g. FIN-A/12/Room 1)
-        var m1 = c.match(/^([A-Z]+)-([A-Z])\/(\d+)\/(.+)$/i);
+
+        // Format 1: SUB-SEC/WEEK/ROOM (e.g. FIN-A/12/Room 1)
+        var m1 = c.match(/^([A-Za-z0-9_.-]+)-([A-Za-z])\/(\d+)\/([A-Za-z0-9_.-]+)$/i);
         if (m1) return { key: (m1[1] + '-' + m1[2]).toUpperCase(), subject: m1[1].toUpperCase(), section: m1[2].toUpperCase(), week: m1[3], room: m1[4], cancelled: isCancelled };
         
-        // Format 2: SUB/WEEK/ROOM (Term 4 format, e.g. FIN/12/Room 1)
-        var m2 = c.match(/^([A-Z]+)\/(\d+)\/(.+)$/i);
+        // Format 2: SUB/WEEK/ROOM (e.g. FIN/12/Room 1)
+        var m2 = c.match(/^([A-Za-z0-9_.-]+)\/(\d+)\/([A-Za-z0-9_.-]+)$/i);
         if (m2) return { key: m2[1].toUpperCase(), subject: m2[1].toUpperCase(), section: '', week: m2[2], room: m2[3], cancelled: isCancelled };
 
         // Format 3: SUB-SEC/ROOM/WEEK (Term 5 format, e.g. SM-B/CR-01/1)
-        var m3 = c.match(/^([A-Z]+)-([A-Z])\/(.+)\/(\d+)$/i);
+        var m3 = c.match(/^([A-Za-z0-9_.-]+)-([A-Za-z])\/([A-Za-z0-9_.-]+)\/(\d+)$/i);
         if (m3) return { key: (m3[1] + '-' + m3[2]).toUpperCase(), subject: m3[1].toUpperCase(), section: m3[2].toUpperCase(), week: m3[4], room: m3[3], cancelled: isCancelled };
 
         // Format 4: SUB/ROOM/WEEK (Term 5 format, e.g. CIMA/CR-01/1)
-        var m4 = c.match(/^([A-Z]+)\/(.+)\/(\d+)$/i);
+        var m4 = c.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/(\d+)$/i);
         if (m4) return { key: m4[1].toUpperCase(), subject: m4[1].toUpperCase(), section: '', week: m4[3], room: m4[2], cancelled: isCancelled };
 
         return null;
       }
 
-      var activeTerm = getLocal('activeTerm') || 'term4';
+      var activeTerm = 'term5';
       var state = { 
-        term4: { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false },
         term5: { data: null, mySubjects: [], attendance: {}, seats: {}, lastFetch: null, fetchError: null, fetching: false },
         links: [], user: null, authInitialized: false, adminUsers: null, networkCompareMode: false, networkMyGroupsMode: false, networkSelected: {}, adminGroups: {} 
       };
@@ -1301,9 +1303,9 @@
       function syncToFirebase() {
         if (!state.user) return;
         window.fbSetDoc(window.fbDoc(window.fbDb, "users", state.user.uid), {
-          mySubjects: state.term4.mySubjects,
-          attendance: state.term4.attendance,
-          seats: state.term4.seats,
+          mySubjects: state.term5.mySubjects,
+          attendance: state.term5.attendance,
+          seats: state.term5.seats,
           term5MySubjects: state.term5.mySubjects,
           term5Attendance: state.term5.attendance,
           term5Seats: state.term5.seats,
@@ -1347,13 +1349,15 @@
 
       // ── Fetch ──────────────────────────────────────────────────
       function fetchData(silent) {
-        // Fetch for both terms
-        fetchTermData('term4', '4', silent);
         fetchTermData('term5', '5', silent);
       }
       function fetchTermData(termKey, termParam, silent) {
         state[termKey].fetching = true;
         if (!silent) render();
+        else {
+          var br = document.getElementById('btnRefresh');
+          if (br) br.classList.add('spinning');
+        }
         fetch('/api/timetable?term=' + termParam + '&t=' + Date.now())
           .then(function (r) {
             if (!r.ok) return r.json().catch(function () { return { error: 'http_' + r.status }; });
@@ -1363,13 +1367,19 @@
             if (json && json.error === 'auth') { state[termKey].fetchError = 'auth'; }
             else if (json && json.error) { if (!silent || !state[termKey].data) state[termKey].fetchError = json.message || json.error; }
             else { state[termKey].data = json; state[termKey].lastFetch = new Date(); state[termKey].fetchError = null; setLocal('cached-timetable-' + termKey, json); setLocal('cached-time-' + termKey, new Date().toISOString()); }
-            state[termKey].fetching = false; render();
+            state[termKey].fetching = false;
+            var br = document.getElementById('btnRefresh');
+            if (br) br.classList.remove('spinning');
+            render();
           })
           .catch(function (e) {
             var cached = getLocal('cached-timetable-' + termKey);
             if (cached && !state[termKey].data) { state[termKey].data = cached; var ct = getLocal('cached-time-' + termKey); state[termKey].lastFetch = ct ? new Date(ct) : null; }
             if (!silent || !state[termKey].data) state[termKey].fetchError = (e && e.message) || 'Could not load timetable';
-            state[termKey].fetching = false; render();
+            state[termKey].fetching = false;
+            var br = document.getElementById('btnRefresh');
+            if (br) br.classList.remove('spinning');
+            render();
           });
       }
 
@@ -1393,6 +1403,10 @@
             var range = parseSlotRange(sh);
             var lines = cell.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
             if (!lines.length) return;
+            // Filter out lines that are purely cancellation text or dashes so they don't become blank info lines
+            var meaningfulLines = lines.filter(function (l) { return !/^(\(?cancelled\)?|[-—.]+)$/i.test(l.trim()); });
+            if (!meaningfulLines.length) return;
+
             // Check for inline bracket timing override (e.g. Independence Day DDM classes)
             var overrideRange = parseCellOverrideRange(lines);
             var effectiveRange = overrideRange || range;
@@ -1400,13 +1414,13 @@
             var cl = lines.filter(function (l) { return parseLine(l) !== null; });
             if (!cl.length) {
               events.push({
-                type: 'info', date: row.date, day: row.day, slotIndex: idx, slotHeader: sh, text: lines.join(' · '),
+                type: 'info', date: row.date, day: row.day, slotIndex: idx, slotHeader: sh, text: meaningfulLines.join(' · '),
                 start: range ? dtr(row.date, range.start) : null, end: range ? dtr(row.date, range.end) : null
               });
               return;
             }
             cl.forEach(function (line) {
-              var p = parseLine(line); if (!mySet[p.key]) return;
+              var p = parseLine(line); if (!p || !mySet[p.key]) return;
               var isCanc = p.cancelled || !!KNOWN_CANCELLED[row.date + ':' + p.key + ':' + p.week];
               events.push({
                 type: 'class', date: row.date, day: row.day, slotIndex: idx,
@@ -1453,7 +1467,7 @@
       }
       function getNowNext(events) {
         var now = new Date();
-        var ce = events.filter(function (e) { return e.type === 'class' && e.start && e.end; });
+        var ce = events.filter(function (e) { return e.type === 'class' && !e.cancelled && e.start && e.end; });
         ce.sort(function (a, b) { return a.start - b.start; });
         var cur = null, nxt = null;
         for (var i = 0; i < ce.length; i++) {
@@ -1500,11 +1514,6 @@
           '<button class="icon-btn' + (getActive().fetching ? ' spinning' : '') + '" id="btnRefresh">' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>' +
           '</button>' +
-          '</div></div>' + 
-          '<div style="display:flex; justify-content:center; padding: 0 16px 8px;">' +
-          '<div style="display:inline-flex; background:var(--bg-elev-2); border-radius:8px; padding:2px; border:1px solid var(--border);">' +
-          '<button id="btnTerm4" style="background:' + (activeTerm==='term4'?'var(--bg-elev)':'transparent') + '; border:' + (activeTerm==='term4'?'1px solid var(--border)':'1px solid transparent') + '; box-shadow:' + (activeTerm==='term4'?'0 1px 3px rgba(0,0,0,0.1)':'none') + '; padding: 4px 16px; border-radius:6px; font-family:var(--font-display); font-weight:700; font-size:13px; color:' + (activeTerm==='term4'?'var(--text)':'var(--text-dim)') + '; cursor:pointer; transition:all 0.2s;">Term 4</button>' +
-          '<button id="btnTerm5" style="background:' + (activeTerm==='term5'?'var(--bg-elev)':'transparent') + '; border:' + (activeTerm==='term5'?'1px solid var(--border)':'1px solid transparent') + '; box-shadow:' + (activeTerm==='term5'?'0 1px 3px rgba(0,0,0,0.1)':'none') + '; padding: 4px 16px; border-radius:6px; font-family:var(--font-display); font-weight:700; font-size:13px; color:' + (activeTerm==='term5'?'var(--text)':'var(--text-dim)') + '; cursor:pointer; transition:all 0.2s;">Term 5</button>' +
           '</div></div>';
       }
 
@@ -1543,21 +1552,27 @@
             window.fbSignInWithPopup(window.fbAuth, window.fbGoogleProvider).catch(function(e) { console.error('Sign-in error', e); alert('Could not sign in: ' + e.message); });
           }
         };
-        var btnT4 = document.getElementById('btnTerm4');
-        var btnT5 = document.getElementById('btnTerm5');
-        if (btnT4) btnT4.onclick = function() { activeTerm = 'term4'; setLocal('activeTerm', 'term4'); render(); };
-        if (btnT5) btnT5.onclick = function() { activeTerm = 'term5'; setLocal('activeTerm', 'term5'); render(); };
       }
       function setPage(p) {
         if (currentPage !== p && typeof window.gtag === 'function') {
           window.gtag('event', 'page_view', { page_path: '/' + p });
         }
         currentPage = p;
-        render();
+        if (p === 'timetable') {
+          renderTimetable(true);
+        } else {
+          render();
+        }
       }
       function bindNav() {
         var t = document.getElementById('navTT'), c = document.getElementById('navCal'), a = document.getElementById('navAT'), l = document.getElementById('navLinks'), n = document.getElementById('navNet');
-        if (t) t.onclick = function () { setPage('timetable'); };
+        if (t) t.onclick = function () {
+          if (currentPage === 'timetable') {
+            renderTimetable(true);
+          } else {
+            setPage('timetable');
+          }
+        };
         if (c) c.onclick = function () { setPage('calendar'); };
         if (a) a.onclick = function () { setPage('attendance'); };
         if (l) l.onclick = function () { setLocal('seen-links', true); setPage('links'); };
@@ -1565,7 +1580,9 @@
       }
 
       // ── Timetable page ──────────────────────────────────────────
-      function renderTimetable() {
+      var initialTimetableScrolled = false;
+      function renderTimetable(forceScroll) {
+        var prevScrollY = window.scrollY;
         var events = buildEvents(), nn = getNowNext(events), td = todayStr();
         ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '<div id="tick-update">' + syncHtml() + boardHtml(nn) + '</div></div>' +
           (getActive().mySubjects.length === 0
@@ -1584,11 +1601,17 @@
           var row = btn.closest('.slot-row');
           if (row) row.className = 'slot-row' + (ab ? ' absent-row' : '');
         });
+
         var tc = ROOT.querySelector('.day-card.today');
-        if (tc) {
-          setTimeout(function () { tc.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
+        if (!initialTimetableScrolled || forceScroll) {
+          if (tc) {
+            initialTimetableScrolled = true;
+            setTimeout(function () { tc.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
+          } else if (forceScroll) {
+            setTimeout(function () { window.scrollTo({ top: 0, behavior: 'smooth' }); }, 50);
+          }
         } else {
-          setTimeout(function () { window.scrollTo({ top: 0, behavior: 'smooth' }); }, 50);
+          window.scrollTo({ top: prevScrollY, behavior: 'instant' });
         }
       }
 
@@ -1596,14 +1619,14 @@
       function bCard(ev, isNow) {
         var lbl = isNow ? 'NOW' : 'NEXT';
         if (!ev) return '<div class="board-card' + (isNow ? ' now' : '') + '"><div class="board-label">' + lbl + '</div><div class="board-empty">' + (isNow ? 'No class right now' : 'Nothing else today') + '</div></div>';
-        var col = ev.cancelled ? 'var(--danger)' : colorFor(ev.subject);
+        var col = colorFor(ev.subject);
         var meta = isNow ? fmt(ev.start) + ' – ' + fmt(ev.end) : fmt(ev.start) + ' · ' + until(ev.start);
         var seat = getActive().seats[ev.key];
         var seatHtml = seat ? '<span class="seat-badge">🪑 ' + esc(seat) + '</span>' : '';
         return '<div class="board-card' + (isNow ? ' now' : '') + '">' +
           '<div class="board-pill" style="background:' + col + '"></div>' +
           '<div class="board-label">' + lbl + '</div>' +
-          '<div class="board-code">' + esc(ev.subject) + (ev.section ? '-' + ev.section : '') + (ev.cancelled ? '<br><span style="color:var(--danger);font-size:14px;">(CANCELLED)</span>' : '') + '</div>' +
+          '<div class="board-code">' + esc(ev.subject) + (ev.section ? '-' + ev.section : '') + '</div>' +
           '<div class="board-room"><span>' + esc(ev.room) + '</span>' + seatHtml + '</div>' +
           '<div class="board-meta">' + meta + '</div></div>';
       }
@@ -1614,20 +1637,22 @@
         events.forEach(function (e) { byDate[e.date].push(e); });
         return order.map(function (date) {
           var evs = byDate[date].slice().sort(function (a, b) { return a.slotIndex - b.slotIndex; });
+          // Exclude cancelled lectures so they are completely removed from timetable rather than leaving an empty breakline
+          evs = evs.filter(function (e) { return !e.cancelled; });
           var r = getActive().data.rows.find(function (x) { return x.date === date; });
           var isToday = date === td;
           var body = !evs.length ? '<div class="empty-day">No classes for your subjects</div>' : evs.map(function (e) {
             if (e.type === 'info') return '<div class="slot-row"><div class="slot-time">' + esc(e.slotHeader) + '</div><div class="slot-main"><div class="info-line">' + esc(e.text) + '</div></div></div>';
-            var col = e.cancelled ? 'var(--danger)' : colorFor(e.subject), ab = isAbsent(e.lectureId), lid = e.lectureId.replace(/"/g, '');
+            var col = colorFor(e.subject), ab = isAbsent(e.lectureId), lid = e.lectureId.replace(/"/g, '');
             var seat = getActive().seats[e.key];
             var seatHtml = seat ? '<span class="seat-badge" style="margin-left:6px;">🪑 ' + esc(seat) + '</span>' : '';
             return '<div class="slot-row' + (ab ? ' absent-row' : '') + '">' +
               '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
               '<div class="slot-main">' +
-              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + (e.cancelled ? ' (CANCELLED)' : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
+              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
               '<div style="display:flex;align-items:center;"><span class="room-chip">' + esc(e.room) + '</span>' + seatHtml + '</div>' +
               '</div>' +
-              (e.cancelled ? '' : '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>') +
+              '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>' +
               '</div>';
           }).join('');
           return '<div class="day-card' + (isToday ? ' today' : '') + '" data-date="' + esc(date) + '">' +
@@ -1645,7 +1670,7 @@
 
         // Build set of dates that have classes
         var classDates = {};
-        events.forEach(function (e) { if (e.type === 'class') classDates[e.date] = true; });
+        events.forEach(function (e) { if (e.type === 'class' && !e.cancelled) classDates[e.date] = true; });
 
         var now = new Date();
         var y = calViewMonth.getFullYear(), mo = calViewMonth.getMonth();
@@ -1680,18 +1705,18 @@
         // Detail panel for selected date
         var detailHtml = '';
         if (calSelectedDate) {
-          var dayEvents = events.filter(function (e) { return e.date === calSelectedDate; })
+          var dayEvents = events.filter(function (e) { return e.date === calSelectedDate && !e.cancelled; })
             .sort(function (a, b) { return a.slotIndex - b.slotIndex; });
           var row = getActive().data.rows.find(function (r) { return r.date === calSelectedDate; });
           var slots = !dayEvents.length
             ? '<div class="empty-day">No classes for your subjects</div>'
             : dayEvents.map(function (e) {
               if (e.type === 'info') return '<div class="slot-row"><div class="slot-time">' + esc(e.slotHeader) + '</div><div class="slot-main"><div class="info-line">' + esc(e.text) + '</div></div></div>';
-              var col = e.cancelled ? 'var(--danger)' : colorFor(e.subject);
+              var col = colorFor(e.subject);
               return '<div class="slot-row">' +
                 '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
                 '<div class="slot-main">' +
-                '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + (e.cancelled ? ' (CANCELLED)' : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
+                '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
                 '<div><span class="room-chip">' + esc(e.room) + '</span></div>' +
                 '</div></div>';
             }).join('');
@@ -1912,7 +1937,8 @@
               if (!p) return;
               selectedIds.forEach(function(uid) {
                 var u = state.networkSelected[uid];
-                if (u.mySubjects && u.mySubjects.includes(p.key)) {
+                var userSubs = u.term5MySubjects || u.mySubjects || [];
+                if (userSubs.includes(p.key)) {
                   var nm = u.displayName;
                   if (!nm && u.email) {
                     var prefix = u.email.split('@')[0];
@@ -2382,70 +2408,59 @@
       // ── Init ──────────────────────────────────────────────
       function init() {
         var dm = getLocal('dark-mode'); if (dm) applyTheme(true);
-        var sub4 = getLocal('my-subjects'); if (sub4) state.term4.mySubjects = sub4; // legacy fallback
-        var sub4n = getLocal('my-subjects-term4'); if (sub4n) state.term4.mySubjects = sub4n;
-        var sub5 = getLocal('my-subjects-term5'); if (sub5) state.term5.mySubjects = sub5;
-        
-        var att4 = getLocal('attendance'); if (att4) state.term4.attendance = att4; // legacy fallback
-        var att4n = getLocal('attendance-term4'); if (att4n) state.term4.attendance = att4n;
-        var att5 = getLocal('attendance-term5'); if (att5) state.term5.attendance = att5;
-
-        var sts4 = getLocal('seats'); if (sts4) state.term4.seats = sts4; // legacy fallback
-        var sts4n = getLocal('seats-term4'); if (sts4n) state.term4.seats = sts4n;
-        var sts5 = getLocal('seats-term5'); if (sts5) state.term5.seats = sts5;
+        var sub5 = getLocal('my-subjects-term5') || getLocal('my-subjects'); if (sub5) state.term5.mySubjects = sub5;
+        var att5 = getLocal('attendance-term5') || getLocal('attendance'); if (att5) state.term5.attendance = att5;
+        var sts5 = getLocal('seats-term5') || getLocal('seats'); if (sts5) state.term5.seats = sts5;
 
         var lnks = getLocal('links'); if (lnks) state.links = lnks;
         var grps = getLocal('admin-groups'); if (grps) state.adminGroups = grps;
         
-        var cached4 = getLocal('cached-timetable') || getLocal('cached-timetable-term4');
-        if (cached4) { state.term4.data = cached4; var ct4 = getLocal('cached-time') || getLocal('cached-time-term4'); state.term4.lastFetch = ct4 ? new Date(ct4) : null; }
-        
-        var cached5 = getLocal('cached-timetable-term5');
-        if (cached5) { state.term5.data = cached5; var ct5 = getLocal('cached-time-term5'); state.term5.lastFetch = ct5 ? new Date(ct5) : null; }
+        var cached5 = getLocal('cached-timetable-term5') || getLocal('cached-timetable');
+        if (cached5) { state.term5.data = cached5; var ct5 = getLocal('cached-time-term5') || getLocal('cached-time'); state.term5.lastFetch = ct5 ? new Date(ct5) : null; }
         
         // ── Normal Firebase auth ──
-          window.fbOnAuthStateChanged(window.fbAuth, function(user) {
-            state.authInitialized = true;
-            if (user) {
-              if (!user.email.endsWith('@iimnagpur.ac.in')) {
-                alert('Please sign in using your @iimnagpur.ac.in Google account.');
-                window.fbSignOut(window.fbAuth);
-                return;
-              }
-              state.user = user;
-              window.fbGetDoc(window.fbDoc(window.fbDb, "users", user.uid)).then(function(docSnap) {
-                if (docSnap.exists()) {
-                  var d = docSnap.data();
-                  if (d.mySubjects) { state.term4.mySubjects = d.mySubjects; setLocal('my-subjects-term4', d.mySubjects); }
-                  if (d.term5MySubjects) { state.term5.mySubjects = d.term5MySubjects; setLocal('my-subjects-term5', d.term5MySubjects); }
-                  
-                  if (d.attendance) {
-                    var merged = Object.assign({}, d.attendance, state.term4.attendance);
-                    state.term4.attendance = merged;
-                    setLocal('attendance-term4', state.term4.attendance);
-                  }
-                  if (d.term5Attendance) {
-                    var merged5 = Object.assign({}, d.term5Attendance, state.term5.attendance);
-                    state.term5.attendance = merged5;
-                    setLocal('attendance-term5', state.term5.attendance);
-                  }
-
-                  if (d.seats) { state.term4.seats = Object.assign({}, state.term4.seats, d.seats); setLocal('seats-term4', state.term4.seats); }
-                  if (d.term5Seats) { state.term5.seats = Object.assign({}, state.term5.seats, d.term5Seats); setLocal('seats-term5', state.term5.seats); }
-                  if (d.links) { state.links = d.links; setLocal('links', d.links); }
-                  if (!d.email || d.email !== state.user.email) syncToFirebase();
-                } else {
-                  syncToFirebase();
-                }
-                render();
-              }).catch(console.error);
-            } else {
-              state.user = null;
+        window.fbOnAuthStateChanged(window.fbAuth, function(user) {
+          state.authInitialized = true;
+          if (user) {
+            if (!user.email.endsWith('@iimnagpur.ac.in')) {
+              alert('Please sign in using your @iimnagpur.ac.in Google account.');
+              window.fbSignOut(window.fbAuth);
+              return;
             }
-            render();
-          });
+            state.user = user;
+            window.fbGetDoc(window.fbDoc(window.fbDb, "users", user.uid)).then(function(docSnap) {
+              if (docSnap.exists()) {
+                var d = docSnap.data();
+                var userSubs = d.term5MySubjects || d.mySubjects;
+                if (userSubs) { state.term5.mySubjects = userSubs; setLocal('my-subjects-term5', userSubs); }
+                
+                var userAtt = d.term5Attendance || d.attendance;
+                if (userAtt) {
+                  var merged5 = Object.assign({}, userAtt, state.term5.attendance);
+                  state.term5.attendance = merged5;
+                  setLocal('attendance-term5', state.term5.attendance);
+                }
+
+                var userSeats = d.term5Seats || d.seats;
+                if (userSeats) {
+                  state.term5.seats = Object.assign({}, state.term5.seats, userSeats);
+                  setLocal('seats-term5', state.term5.seats);
+                }
+
+                if (d.links) { state.links = d.links; setLocal('links', d.links); }
+                if (!d.email || d.email !== state.user.email) syncToFirebase();
+              } else {
+                syncToFirebase();
+              }
+              render();
+            }).catch(console.error);
+          } else {
+            state.user = null;
+          }
           render();
-          fetchData();
+        });
+        render();
+        fetchData(true);
 
         setInterval(function () { if (getActive().data && currentPage === 'timetable') updateTick(); }, 15000);
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () { });

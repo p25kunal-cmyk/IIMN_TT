@@ -18,7 +18,7 @@ var TERM_CONFIG = {
 
 function doGet(e) {
   if (e && e.parameter && e.parameter.action === 'data') {
-    var term = (e.parameter.term || '4').toString();
+    var term = (e.parameter.term || '5').toString();
     var output = ContentService
       .createTextOutput(JSON.stringify(getTimetableData(term)))
       .setMimeType(ContentService.MimeType.JSON);
@@ -31,7 +31,7 @@ function doGet(e) {
 }
 
 function getTimetableData(term) {
-  var config = TERM_CONFIG[term] || TERM_CONFIG['4'];
+  var config = TERM_CONFIG[term] || TERM_CONFIG['5'];
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(config.sheetName);
   if (!sheet) return { error: "Sheet '" + config.sheetName + "' not found" };

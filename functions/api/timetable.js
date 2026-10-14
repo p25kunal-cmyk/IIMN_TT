@@ -1,9 +1,9 @@
 export async function onRequest(context) {
   const BASE_URL = 'https://script.google.com/a/macros/iimnagpur.ac.in/s/AKfycbwqaKOCa597wRpWy1ywlCDPHpoQgAC3n0AsurAUjgLeIDRU0M9nwRpgW_IhKm6gvpT8sA/exec?action=data';
 
-  // Forward the `term` query parameter (default: 4)
+  // Forward the `term` query parameter (default: 5)
   const url = new URL(context.request.url);
-  const term = url.searchParams.get('term') || '4';
+  const term = url.searchParams.get('term') || '5';
   const EXEC_URL = BASE_URL + '&term=' + encodeURIComponent(term);
 
   const headers = new Headers({
