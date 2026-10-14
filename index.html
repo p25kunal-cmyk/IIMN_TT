@@ -1386,12 +1386,14 @@
           });
       }
 
-      // Known cancelled / rescheduled classes from sheet where formatting was not exportable as plain text
+      // Known cancelled / rescheduled classes from sheet where formatting was not exportable as plain text.
+      // Supports both 'DATE:KEY:WEEK' (date-specific) and 'KEY:WEEK' (any date) formats.
       var KNOWN_CANCELLED = {
         '28-Jul-2026:FSA:10': true,
         '30-Jul-2026:CV-A:10': true,
         '30-Jul-2026:CV-B:10': true,
-        '13-Aug-2026:MFSM:15': true
+        '13-Aug-2026:MFSM:15': true,
+        'IAPM:7': true
       };
 
       // ── Events ─────────────────────────────────────────────────
@@ -1433,7 +1435,9 @@
             }
             cl.forEach(function (line) {
               var p = parseLine(line); if (!p || !mySet[p.key]) return;
-              var isCanc = p.cancelled || !!KNOWN_CANCELLED[row.date + ':' + p.key + ':' + p.week];
+              var isCanc = p.cancelled
+                || !!KNOWN_CANCELLED[row.date + ':' + p.key + ':' + p.week]
+                || !!KNOWN_CANCELLED[p.key + ':' + p.week];
               events.push({
                 type: 'class', date: row.date, day: row.day, slotIndex: idx,
                 slotHeader: effectiveSh,
