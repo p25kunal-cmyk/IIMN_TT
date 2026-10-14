@@ -2,8 +2,7 @@
  * ── UPDATED WebAppAPI.gs ─────────────────────────────────────────────
  * Supports multiple terms via the `term` query parameter.
  *
- * /exec?action=data          → Term 4 data (default, backwards compatible)
- * /exec?action=data&term=4   → Term 4 data
+ * /exec?action=data          → Term 5 data (default)
  * /exec?action=data&term=5   → Term 5 data
  * ────────────────────────────────────────────────────────────────────
  */
@@ -30,6 +29,32 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+/**
+ * Check if a RichTextValue cell (or any of its runs) has strikethrough applied.
+ * Returns true if the entire visible text is struck through.
+ */
+function isCellStrikethrough(richCell) {
+  try {
+    var text = richCell.getText();
+    if (!text || !text.trim()) return false;
+    // Check if the whole-cell text style has strikethrough
+    var style = richCell.getTextStyle();
+    if (style && style.isStrikethrough && style.isStrikethrough()) return true;
+    // Check individual runs - if every run is strikethrough, cell is cancelled
+    var runs = richCell.getRuns ? richCell.getRuns() : [];
+    if (runs.length > 0) {
+      var allStruck = runs.every(function(run) {
+        var rs = run.getTextStyle();
+        return rs && rs.isStrikethrough && rs.isStrikethrough();
+      });
+      if (allStruck) return true;
+    }
+    return false;
+  } catch(err) {
+    return false;
+  }
+}
+
 function getTimetableData(term) {
   var config = TERM_CONFIG[term] || TERM_CONFIG['5'];
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -46,6 +71,14 @@ function getTimetableData(term) {
   var meta = sheet.getRange(config.startRow, 1, numRows, 3).getValues();
   var data = sheet.getRange(config.startRow, config.startCol, numRows, numCols).getValues();
 
+  // Get rich text values to detect strikethrough formatting
+  var richData;
+  try {
+    richData = sheet.getRange(config.startRow, config.startCol, numRows, numCols).getRichTextValues();
+  } catch(err) {
+    richData = null;
+  }
+
   var tz = Session.getScriptTimeZone();
   var rows = [];
   for (var i = 0; i < numRows; i++) {
@@ -53,11 +86,28 @@ function getTimetableData(term) {
     var dateStr = (dateVal instanceof Date)
       ? Utilities.formatDate(dateVal, tz, "dd-MMM-yyyy")
       : dateVal.toString().trim();
+
+    var cells = data[i].map(function(c, j) {
+      var text = c.toString();
+      if (!text.trim()) return text;
+      // If rich text available and the cell has strikethrough, append (cancelled) marker per line
+      if (richData && richData[i] && richData[i][j]) {
+        var richCell = richData[i][j];
+        if (isCellStrikethrough(richCell)) {
+          // Append (cancelled) to each line so parseLine() in the frontend can detect it
+          text = text.split('\n').map(function(line) {
+            return line.trim() ? line + ' (cancelled)' : line;
+          }).join('\n');
+        }
+      }
+      return text;
+    });
+
     rows.push({
       week: meta[i][0].toString().trim(),
       day:  meta[i][1].toString().trim(),
       date: dateStr,
-      cells: data[i].map(function(c){ return c.toString(); })
+      cells: cells
     });
   }
   return { updatedAt: new Date().toISOString(), term: term, slotHeaders: slotHeaders, rows: rows };
