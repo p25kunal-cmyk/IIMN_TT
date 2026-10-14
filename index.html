@@ -1269,6 +1269,9 @@
         var cleaned = line.replace(/\([^)]*\d+[:.]\d+[^)]*\)/g, '');
         var c = cleaned.replace(/[\u0336\u0335]/g, '').replace(/\(?cancelled\)?/ig, '').trim().replace(/\s+/g, '');
         if (!c) return null;
+        // If every meaningful character was strikethrough, mark as cancelled
+        // (handles cases where Google Sheets strikethrough exports as combining chars on every char)
+        if (!isCancelled && cleaned.trim() !== line.trim()) isCancelled = true;
 
         // Format 1: SUB-SEC/WEEK/ROOM (e.g. FIN-A/12/Room 1)
         var m1 = c.match(/^([A-Za-z0-9_.-]+)-([A-Za-z])\/(\d+)\/([A-Za-z0-9_.-]+)$/i);
@@ -1404,7 +1407,16 @@
             var lines = cell.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
             if (!lines.length) return;
             // Filter out lines that are purely cancellation text or dashes so they don't become blank info lines
-            var meaningfulLines = lines.filter(function (l) { return !/^(\(?cancelled\)?|[-—.]+)$/i.test(l.trim()); });
+            // Filter out lines that are purely cancellation text, dashes, or entirely composed of strikethrough unicode characters
+            var meaningfulLines = lines.filter(function (l) {
+              var t = l.trim();
+              if (!t) return false;
+              if (/^(\(?cancelled\)?|[-—.]+)$/i.test(t)) return false;
+              // If line contains only strikethrough chars + slashes/dashes (entire cell crossed out), filter it
+              var stripped = t.replace(/[\u0336\u0335]/g, '');
+              if (stripped !== t && !stripped.trim()) return false;
+              return true;
+            });
             if (!meaningfulLines.length) return;
 
             // Check for inline bracket timing override (e.g. Independence Day DDM classes)
@@ -1755,7 +1767,7 @@
         { title: 'Moodle', url: 'https://moodle.iimnagpur.ac.in/portal/', category: 'Academics', emoji: '📚' },
         { title: 'Master Timetable', url: 'https://docs.google.com/spreadsheets/d/1l6VH49DEa4n-R6t408gDEgFpqfYpvdSwd7RMaFEjAEA/edit?gid=0#gid=0', category: 'Academics', emoji: '📅' },
         { title: 'Sports Booking', url: 'https://iimnbooking.pythonanywhere.com/', category: 'Tools', emoji: '🏫' },
-        { title: 'Class Absentee', url: 'https://docs.google.com/forms/d/e/1FAIpQLSdKa3lbAdPLViC1wl58cFfRwT_ajadF6RBZCjem42G1dLvliw/viewform', category: 'Forms', emoji: '📋' },
+        { title: 'Class Absentee', url: 'https://docs.google.com/forms/d/e/1FAIpQLSe8TXazkwBgpbu3TtE9fY9qhmeqSD5ynajyW7OLKs58DSgPeA/viewform', category: 'Forms', emoji: '📋' },
         { title: 'Campus Exit', url: 'https://forms.gle/ghvn4HwHAgVSt6i4A', category: 'Forms', emoji: '🚪' }
       ];
 
