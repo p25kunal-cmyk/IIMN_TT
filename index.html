@@ -1265,29 +1265,33 @@
       function parseLine(line) {
         if (!line || typeof line !== 'string') return null;
         var isCancelled = /cancel/i.test(line) || /[\u0336\u0335]/.test(line);
-        // Strip timing in parentheses e.g. "(16:15 - 17:15)"
+        // Extract inline bracket timing override e.g. "(10:45-11:45)" or "(14.00--15.30)"
+        var timeMatch = line.match(/\(\s*(\d{1,2})[:.](\d{2})\s*[-–—]+\s*(\d{1,2})[:.](\d{2})\s*\)/);
+        var customTime = null;
+        if (timeMatch) {
+          var s = timeMatch[1].padStart(2, '0') + ':' + timeMatch[2];
+          var e = timeMatch[3].padStart(2, '0') + ':' + timeMatch[4];
+          customTime = { start: s, end: e, label: s + ' – ' + e };
+        }
         var cleaned = line.replace(/\([^)]*\d+[:.]\d+[^)]*\)/g, '');
         var c = cleaned.replace(/[\u0336\u0335]/g, '').replace(/\(?cancelled\)?/ig, '').trim().replace(/\s+/g, '');
         if (!c) return null;
-        // If every meaningful character was strikethrough, mark as cancelled
-        // (handles cases where Google Sheets strikethrough exports as combining chars on every char)
-        if (!isCancelled && cleaned.trim() !== line.trim()) isCancelled = true;
 
         // Format 1: SUB-SEC/WEEK/ROOM (e.g. FIN-A/12/Room 1)
         var m1 = c.match(/^([A-Za-z0-9_.-]+)-([A-Za-z])\/(\d+)\/([A-Za-z0-9_.-]+)$/i);
-        if (m1) return { key: (m1[1] + '-' + m1[2]).toUpperCase(), subject: m1[1].toUpperCase(), section: m1[2].toUpperCase(), week: m1[3], room: m1[4], cancelled: isCancelled };
+        if (m1) return { key: (m1[1] + '-' + m1[2]).toUpperCase(), subject: m1[1].toUpperCase(), section: m1[2].toUpperCase(), week: m1[3], room: m1[4], cancelled: isCancelled, customTime: customTime };
         
-        // Format 2: SUB/WEEK/ROOM (e.g. FIN/12/Room 1)
+        // Format 2: SUB/WEEK/ROOM (e.g. FIN/12/Room 1 or IW-MMCXO/5/CR06)
         var m2 = c.match(/^([A-Za-z0-9_.-]+)\/(\d+)\/([A-Za-z0-9_.-]+)$/i);
-        if (m2) return { key: m2[1].toUpperCase(), subject: m2[1].toUpperCase(), section: '', week: m2[2], room: m2[3], cancelled: isCancelled };
+        if (m2) return { key: m2[1].toUpperCase(), subject: m2[1].toUpperCase(), section: '', week: m2[2], room: m2[3], cancelled: isCancelled, customTime: customTime };
 
         // Format 3: SUB-SEC/ROOM/WEEK (Term 5 format, e.g. SM-B/CR-01/1)
         var m3 = c.match(/^([A-Za-z0-9_.-]+)-([A-Za-z])\/([A-Za-z0-9_.-]+)\/(\d+)$/i);
-        if (m3) return { key: (m3[1] + '-' + m3[2]).toUpperCase(), subject: m3[1].toUpperCase(), section: m3[2].toUpperCase(), week: m3[4], room: m3[3], cancelled: isCancelled };
+        if (m3) return { key: (m3[1] + '-' + m3[2]).toUpperCase(), subject: m3[1].toUpperCase(), section: m3[2].toUpperCase(), week: m3[4], room: m3[3], cancelled: isCancelled, customTime: customTime };
 
-        // Format 4: SUB/ROOM/WEEK (Term 5 format, e.g. CIMA/CR-01/1)
+        // Format 4: SUB/ROOM/WEEK (Term 5 format, e.g. CIMA/CR-01/1 or PPM/CR-02/10)
         var m4 = c.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/(\d+)$/i);
-        if (m4) return { key: m4[1].toUpperCase(), subject: m4[1].toUpperCase(), section: '', week: m4[3], room: m4[2], cancelled: isCancelled };
+        if (m4) return { key: m4[1].toUpperCase(), subject: m4[1].toUpperCase(), section: '', week: m4[3], room: m4[2], cancelled: isCancelled, customTime: customTime };
 
         return null;
       }
@@ -1422,7 +1426,7 @@
         '30-Jul-2026:CV-A:10': true,
         '30-Jul-2026:CV-B:10': true,
         '13-Aug-2026:MFSM:15': true,
-        'IAPM:7': true
+        '15-Oct-2026:IAPM:7': true
       };
 
       // ── Events ─────────────────────────────────────────────────
@@ -1467,14 +1471,16 @@
               var isCanc = p.cancelled
                 || !!KNOWN_CANCELLED[row.date + ':' + p.key + ':' + p.week]
                 || !!KNOWN_CANCELLED[p.key + ':' + p.week];
+              var lineRange = p.customTime || effectiveRange;
+              var lineSh = p.customTime ? p.customTime.label : effectiveSh;
               events.push({
                 type: 'class', date: row.date, day: row.day, slotIndex: idx,
-                slotHeader: effectiveSh,
+                slotHeader: lineSh,
                 subject: p.subject, section: p.section, room: p.room, key: p.key, week: p.week,
                 lectureId: p.key + ':' + p.week,
                 cancelled: isCanc,
-                start: effectiveRange ? dtr(row.date, effectiveRange.start) : null,
-                end: effectiveRange ? dtr(row.date, effectiveRange.end) : null
+                start: lineRange ? dtr(row.date, lineRange.start) : null,
+                end: lineRange ? dtr(row.date, lineRange.end) : null
               });
             });
           });
