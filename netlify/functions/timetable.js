@@ -2,7 +2,7 @@
 // so the browser never has to make a cross-origin call to Google.
 // Deployed at: /.netlify/functions/timetable
 
-const EXEC_URL = 'https://script.google.com/a/macros/iimnagpur.ac.in/s/AKfycbxBxonDpBgnWDV-vChOuysOLA8WgjE0dZ6Fpl1FAPE9ju3WldBRdqWnXlqDQf2a4_Y31A/exec?action=data';
+const BASE_URL = 'https://script.google.com/a/macros/iimnagpur.ac.in/s/AKfycbwqaKOCa597wRpWy1ywlCDPHpoQgAC3n0AsurAUjgLeIDRU0M9nwRpgW_IhKm6gvpT8sA/exec?action=data';
 
 exports.handler = async function(event, context) {
   const headers = {
@@ -11,11 +11,15 @@ exports.handler = async function(event, context) {
     'Cache-Control': 'no-store'
   };
 
+  const term = (event.queryStringParameters && event.queryStringParameters.term) || '5';
+  const EXEC_URL = BASE_URL + '&term=' + encodeURIComponent(term) + '&t=' + Date.now();
+
   try {
-    const response = await fetch(EXEC_URL + '&t=' + Date.now(), {
+    const response = await fetch(EXEC_URL, {
       redirect: 'follow',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; TimetableProxy/1.0)'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*'
       }
     });
 

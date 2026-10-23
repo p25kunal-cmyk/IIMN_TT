@@ -1361,28 +1361,57 @@
           var br = document.getElementById('btnRefresh');
           if (br) br.classList.add('spinning');
         }
-        fetch('/api/timetable?term=' + termParam + '&t=' + Date.now())
+
+        function handleSuccess(json) {
+          if (json && json.error === 'auth') {
+            state[termKey].fetchError = 'auth';
+          } else if (json && json.error) {
+            if (!silent || !state[termKey].data) state[termKey].fetchError = json.message || json.error;
+          } else {
+            state[termKey].data = json;
+            state[termKey].lastFetch = new Date();
+            state[termKey].fetchError = null;
+            setLocal('cached-timetable-' + termKey, json);
+            setLocal('cached-time-' + termKey, new Date().toISOString());
+          }
+          state[termKey].fetching = false;
+          var br = document.getElementById('btnRefresh');
+          if (br) br.classList.remove('spinning');
+          render();
+        }
+
+        function handleFail(e) {
+          var cached = getLocal('cached-timetable-' + termKey);
+          if (cached && !state[termKey].data) {
+            state[termKey].data = cached;
+            var ct = getLocal('cached-time-' + termKey);
+            state[termKey].lastFetch = ct ? new Date(ct) : null;
+          }
+          if (!silent || !state[termKey].data) state[termKey].fetchError = (e && e.message) || 'Could not load timetable';
+          state[termKey].fetching = false;
+          var br = document.getElementById('btnRefresh');
+          if (br) br.classList.remove('spinning');
+          render();
+        }
+
+        var primaryUrl = '/api/timetable?term=' + termParam + '&t=' + Date.now();
+        var fallbackUrl = 'https://iimn-tt.pages.dev/api/timetable?term=' + termParam + '&t=' + Date.now();
+
+        fetch(primaryUrl)
           .then(function (r) {
-            if (!r.ok) return r.json().catch(function () { return { error: 'http_' + r.status }; });
+            if (!r.ok) throw new Error('Proxy returned ' + r.status);
             return r.json();
           })
-          .then(function (json) {
-            if (json && json.error === 'auth') { state[termKey].fetchError = 'auth'; }
-            else if (json && json.error) { if (!silent || !state[termKey].data) state[termKey].fetchError = json.message || json.error; }
-            else { state[termKey].data = json; state[termKey].lastFetch = new Date(); state[termKey].fetchError = null; setLocal('cached-timetable-' + termKey, json); setLocal('cached-time-' + termKey, new Date().toISOString()); }
-            state[termKey].fetching = false;
-            var br = document.getElementById('btnRefresh');
-            if (br) br.classList.remove('spinning');
-            render();
-          })
-          .catch(function (e) {
-            var cached = getLocal('cached-timetable-' + termKey);
-            if (cached && !state[termKey].data) { state[termKey].data = cached; var ct = getLocal('cached-time-' + termKey); state[termKey].lastFetch = ct ? new Date(ct) : null; }
-            if (!silent || !state[termKey].data) state[termKey].fetchError = (e && e.message) || 'Could not load timetable';
-            state[termKey].fetching = false;
-            var br = document.getElementById('btnRefresh');
-            if (br) br.classList.remove('spinning');
-            render();
+          .then(handleSuccess)
+          .catch(function () {
+            // If primary endpoint fails, fallback to secondary endpoint
+            fetch(fallbackUrl)
+              .then(function (r) {
+                if (!r.ok) return r.json().catch(function () { return { error: 'http_' + r.status }; });
+                return r.json();
+              })
+              .then(handleSuccess)
+              .catch(handleFail);
           });
       }
 
