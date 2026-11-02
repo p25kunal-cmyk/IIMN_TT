@@ -93,11 +93,39 @@ function getTimetableData(term) {
       // If rich text available and the cell has strikethrough, append (cancelled) marker per line
       if (richData && richData[i] && richData[i][j]) {
         var richCell = richData[i][j];
-        if (isCellStrikethrough(richCell)) {
-          // Append (cancelled) to each line so parseLine() in the frontend can detect it
-          text = text.split('\n').map(function(line) {
-            return line.trim() ? line + ' (cancelled)' : line;
-          }).join('\n');
+        try {
+          var runs = richCell.getRuns ? richCell.getRuns() : [];
+          if (runs.length > 0) {
+            var lines = text.split('\n');
+            var charOffset = 0;
+            text = lines.map(function(line) {
+              var lineLen = line.length;
+              var lineStart = charOffset;
+              var lineEnd = charOffset + lineLen;
+              charOffset = lineEnd + 1; // +1 for newline
+              if (!line.trim()) return line;
+              var isLineStruck = runs.some(function(run) {
+                var rStart = run.getStartIndex();
+                var rEnd = run.getEndIndex();
+                if (rStart < lineEnd && rEnd > lineStart) {
+                  var rs = run.getTextStyle();
+                  return rs && rs.isStrikethrough && rs.isStrikethrough();
+                }
+                return false;
+              });
+              return isLineStruck ? line + ' (cancelled)' : line;
+            }).join('\n');
+          } else if (isCellStrikethrough(richCell)) {
+            text = text.split('\n').map(function(line) {
+              return line.trim() ? line + ' (cancelled)' : line;
+            }).join('\n');
+          }
+        } catch(err) {
+          if (isCellStrikethrough(richCell)) {
+            text = text.split('\n').map(function(line) {
+              return line.trim() ? line + ' (cancelled)' : line;
+            }).join('\n');
+          }
         }
       }
       return text;

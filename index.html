@@ -1469,8 +1469,7 @@
             cl.forEach(function (line) {
               var p = parseLine(line); if (!p || !mySet[p.key]) return;
               var isCanc = p.cancelled
-                || !!KNOWN_CANCELLED[row.date + ':' + p.key + ':' + p.week]
-                || !!KNOWN_CANCELLED[p.key + ':' + p.week];
+                || !!KNOWN_CANCELLED[row.date + ':' + p.key + ':' + p.week];
               var lineRange = p.customTime || effectiveRange;
               var lineSh = p.customTime ? p.customTime.label : effectiveSh;
               events.push({
@@ -1485,6 +1484,30 @@
             });
           });
         });
+        // ── Dedup pass: when the same lecture (same key + week) appears on
+        // multiple dates, the earlier occurrence was cancelled and rescheduled
+        // to the later date.  Mark earlier duplicates as cancelled so they
+        // don't show on the timetable or inflate the attendance count.
+        var lecDateMap = {};   // lectureId → [{index, dateObj}]
+        events.forEach(function (ev, idx) {
+          if (ev.type !== 'class') return;
+          var lid = ev.lectureId;
+          if (!lecDateMap[lid]) lecDateMap[lid] = [];
+          lecDateMap[lid].push({ idx: idx, date: ev.start || dtr(ev.date, '00:00') });
+        });
+        Object.keys(lecDateMap).forEach(function (lid) {
+          var entries = lecDateMap[lid];
+          if (entries.length <= 1) return;
+          // Sort by date ascending — keep the latest (rescheduled) occurrence
+          entries.sort(function (a, b) { return (a.date || 0) - (b.date || 0); });
+          // Mark all but the last as cancelled
+          for (var i = 0; i < entries.length - 1; i++) {
+            events[entries[i].idx].cancelled = true;
+          }
+          // Explicitly ensure the latest (rescheduled) occurrence is NOT marked cancelled
+          events[entries[entries.length - 1].idx].cancelled = false;
+        });
+
         return events;
       }
 
@@ -2321,15 +2344,45 @@
         } else {
           var events = buildEvents();
           page.innerHTML = getActive().mySubjects.map(function (key) {
-            var lecs = events.filter(function (e) { return e.type === 'class' && e.key === key && !e.cancelled; });
-            var seenWeeks = {};
-            lecs = lecs.filter(function (e) {
-              if (seenWeeks[e.week]) return false;
-              seenWeeks[e.week] = true;
-              return true;
+            // Build the complete list of lectures for this subject.
+            // When a class is cancelled (via strikethrough or removed from sheet),
+            // it is rescheduled in the future, so do not drop it or consider it cancelled permanently.
+            var keyEvents = events.filter(function (e) { return e.type === 'class' && e.key === key; });
+            var weekMap = {};
+            keyEvents.forEach(function (e) {
+              var w = parseInt(e.week) || 0;
+              if (!w) return;
+              // If an active (uncancelled) occurrence exists, keep it
+              if (weekMap[w] && !weekMap[w].cancelled) return;
+              weekMap[w] = e;
             });
-            lecs.sort(function (a, b) { return (parseInt(a.week) || 0) - (parseInt(b.week) || 0); });
-            var pastLecs = lecs.filter(function (e) { return isLecturePast(e); });
+
+            // Determine maximum week number scheduled for this subject (or default 20 for regular 3-credit courses)
+            var weeksFound = Object.keys(weekMap).map(function (w) { return parseInt(w) || 0; });
+            var maxWeek = weeksFound.length ? Math.max.apply(null, weeksFound) : 0;
+            if (key.indexOf('IW') !== 0 && maxWeek > 0) {
+              maxWeek = Math.max(maxWeek, 20);
+            }
+
+            var lecs = [];
+            for (var w = 1; w <= maxWeek; w++) {
+              var ev = weekMap[w];
+              if (ev && !ev.cancelled) {
+                lecs.push(ev);
+              } else {
+                // Either cancelled on original date (pending reschedule) or temporarily removed from the sheet
+                lecs.push({
+                  type: 'class',
+                  key: key,
+                  week: String(w),
+                  lectureId: key + ':' + w,
+                  isPendingReschedule: true,
+                  date: null
+                });
+              }
+            }
+
+            var pastLecs = lecs.filter(function (e) { return !e.isPendingReschedule && isLecturePast(e); });
             var abCnt = pastLecs.filter(function (e) { return isAbsent(e.lectureId); }).length;
             var pastTotal = pastLecs.length;
             var att = pastTotal - abCnt;
@@ -2341,14 +2394,14 @@
             var bc = left < 0 ? 'var(--danger)' : left <= 1 ? 'var(--warn)' : 'var(--good)';
             var chips = lecs.map(function (e) {
               var ab = isAbsent(e.lectureId);
-              var past = isLecturePast(e);
+              var past = !e.isPendingReschedule && isLecturePast(e);
               var cls = ab ? ' absent' : (past ? ' present' : ' upcoming');
               var lid = e.lectureId.replace(/"/g, '');
               return '<div class="lec-chip' + cls + '" data-lid="' + esc(lid) + '" data-upcoming="' + (!past ? '1' : '') + '">' + esc(e.week) + '</div>';
             }).join('');
             var statsHtml = pastTotal
               ? att + ' attended \xb7 ' + abCnt + ' absent \xb7 ' + pct + '%' + (lecs.length > pastTotal ? ' <span style="color:var(--text-dim)">(' + (lecs.length - pastTotal) + ' upcoming)</span>' : '')
-              : '<span style="color:var(--text-dim)">No classes yet</span>';
+              : '<span style="color:var(--text-dim)">No classes yet (' + lecs.length + ' upcoming)</span>';
             return '<div class="att-card">' +
               '<div class="att-card-head"><span class="att-subject" style="color:' + col + '">' + esc(key) + '</span><span class="att-status-pill ' + pc + '">' + pt + '</span></div>' +
               '<div class="att-bar-wrap"><div class="att-bar" style="width:' + pct + '%;background:' + bc + '"></div></div>' +
