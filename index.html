@@ -452,6 +452,21 @@
       font-weight: 400;
     }
 
+    .iw-pill {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      background: rgba(234, 179, 8, 0.16);
+      color: #eab308;
+      border: 1px solid rgba(234, 179, 8, 0.32);
+      padding: 1px 6px;
+      border-radius: 5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
     .room-chip {
       font-family: var(--font-mono);
       font-size: 11px;
@@ -1258,7 +1273,9 @@
         subjects.forEach(function(sub, i) { _colorMap[sub] = COLORS[i % COLORS.length]; });
       }
       function colorFor(c) {
-        var sub = (c || '').split('-')[0].toUpperCase();
+        var full = (c || '').toUpperCase();
+        if (_colorMap[full]) return _colorMap[full];
+        var sub = full.split('-')[0];
         return _colorMap[sub] || COLORS[0];
       }
 
@@ -1433,6 +1450,7 @@
       function buildEvents() {
         if (!getActive().data) return [];
         var mySet = {}; getActive().mySubjects.forEach(function (k) { mySet[k] = true; });
+        var hasSelectedIw = getActive().mySubjects.some(function (k) { return k.indexOf('IW') === 0; });
         var events = [];
         var slotCount = getSlotCount();
         getActive().data.rows.forEach(function (row) {
@@ -1460,14 +1478,23 @@
             var effectiveSh = overrideRange ? overrideRange.label : sh;
             var cl = lines.filter(function (l) { return parseLine(l) !== null; });
             if (!cl.length) {
+              var infoText = meaningfulLines.join(' · ');
+              var prevInfo = events[events.length - 1];
+              if (prevInfo && prevInfo.type === 'info' && prevInfo.date === row.date && prevInfo.text === infoText) {
+                return;
+              }
               events.push({
-                type: 'info', date: row.date, day: row.day, slotIndex: idx, slotHeader: sh, text: meaningfulLines.join(' · '),
+                type: 'info', date: row.date, day: row.day, slotIndex: idx, slotHeader: sh, text: infoText,
                 start: range ? dtr(row.date, range.start) : null, end: range ? dtr(row.date, range.end) : null
               });
               return;
             }
             cl.forEach(function (line) {
-              var p = parseLine(line); if (!p || !mySet[p.key]) return;
+              var p = parseLine(line); if (!p) return;
+              var isIw = p.key.indexOf('IW') === 0;
+              // If it's a regular elective, require it to be selected.
+              // If it's an I-Week workshop, show if selected OR if no specific I-Week workshop was selected yet.
+              if (!mySet[p.key] && !(isIw && !hasSelectedIw)) return;
               var isCanc = p.cancelled
                 || !!KNOWN_CANCELLED[row.date + ':' + p.key + ':' + p.week];
               var lineRange = p.customTime || effectiveRange;
@@ -1478,6 +1505,7 @@
                 subject: p.subject, section: p.section, room: p.room, key: p.key, week: p.week,
                 lectureId: p.key + ':' + p.week,
                 cancelled: isCanc,
+                isIw: isIw,
                 start: lineRange ? dtr(row.date, lineRange.start) : null,
                 end: lineRange ? dtr(row.date, lineRange.end) : null
               });
@@ -1710,7 +1738,11 @@
         getActive().data.rows.forEach(function (r) { if (!byDate[r.date]) { byDate[r.date] = []; order.push(r.date); } });
         events.forEach(function (e) { byDate[e.date].push(e); });
         return order.map(function (date) {
-          var evs = byDate[date].slice().sort(function (a, b) { return a.slotIndex - b.slotIndex; });
+          var evs = byDate[date].slice().sort(function (a, b) {
+            var aTime = a.start ? a.start.getTime() : a.slotIndex * 100000;
+            var bTime = b.start ? b.start.getTime() : b.slotIndex * 100000;
+            return aTime - bTime;
+          });
           // Exclude cancelled lectures so they are completely removed from timetable rather than leaving an empty breakline
           evs = evs.filter(function (e) { return !e.cancelled; });
           var r = getActive().data.rows.find(function (x) { return x.date === date; });
@@ -1720,11 +1752,16 @@
             var col = colorFor(e.subject), ab = isAbsent(e.lectureId), lid = e.lectureId.replace(/"/g, '');
             var seat = getActive().seats[e.key];
             var seatHtml = seat ? '<span class="seat-badge" style="margin-left:6px;">🪑 ' + esc(seat) + '</span>' : '';
+            var isIw = e.isIw || (e.key && e.key.indexOf('IW') === 0);
+            var iwTag = isIw ? '<span class="iw-pill">⚡ I-Week</span>' : '';
+            var roomHtml = e.room && e.room.toLowerCase() === 'zoom'
+              ? '<span class="room-chip" style="color:var(--accent);border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.08);">📹 Zoom</span>'
+              : '<span class="room-chip">' + esc(e.room) + '</span>';
             return '<div class="slot-row' + (ab ? ' absent-row' : '') + '">' +
               '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
               '<div class="slot-main">' +
-              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
-              '<div style="display:flex;align-items:center;"><span class="room-chip">' + esc(e.room) + '</span>' + seatHtml + '</div>' +
+              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span>' + iwTag + '</div>' +
+              '<div style="display:flex;align-items:center;">' + roomHtml + seatHtml + '</div>' +
               '</div>' +
               '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>' +
               '</div>';
@@ -2464,12 +2501,36 @@
           var items = keys.filter(function (k) { return k.toLowerCase().indexOf(f) !== -1; });
           var el = document.getElementById('chipList');
           if (!items.length) { el.innerHTML = '<div style="padding:10px;color:var(--text-dim)">No matches</div>'; return; }
-          el.innerHTML = items.map(function (k) {
-            var p = k.split('-'), sub = p[0], sec = p[1] || '', col = colorFor(sub), chk = selected.indexOf(k) !== -1 ? 'checked' : '';
+          var regItems = items.filter(function (k) { return k.indexOf('IW') !== 0; });
+          var iwItems = items.filter(function (k) { return k.indexOf('IW') === 0; });
+
+          function renderChip(k) {
+            var isIw = k.indexOf('IW') === 0;
+            var sub, sec;
+            if (isIw) {
+              sub = k;
+              sec = 'Workshop';
+            } else {
+              var p = k.split('-');
+              sub = p[0];
+              sec = p[1] ? 'Section ' + p[1] : '(no section)';
+            }
+            var col = colorFor(k), chk = selected.indexOf(k) !== -1 ? 'checked' : '';
             var seat = getActive().seats[k] || '';
             var seatInput = '<input type="number" class="seat-input ' + (chk ? '' : 'hidden') + '" data-key="' + k + '" placeholder="Seat" value="' + esc(seat) + '">';
-            return '<div class="chip-item"><label><input type="checkbox" value="' + k + '" ' + chk + '><span class="chip-dot" style="background:' + col + '"></span><span class="chip-sub">' + esc(sub) + '</span>' + (sec ? '<span class="chip-sec">Section ' + esc(sec) + '</span>' : '<span class="chip-sec">(no section)</span>') + '</label>' + seatInput + '</div>';
-          }).join('');
+            return '<div class="chip-item"><label><input type="checkbox" value="' + k + '" ' + chk + '><span class="chip-dot" style="background:' + col + '"></span><span class="chip-sub">' + esc(sub) + '</span><span class="chip-sec">' + esc(sec) + '</span></label>' + seatInput + '</div>';
+          }
+
+          var html = '';
+          if (regItems.length) {
+            html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin:6px 0 6px 4px;">Elective Courses</div>';
+            html += regItems.map(renderChip).join('');
+          }
+          if (iwItems.length) {
+            html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px 4px;display:flex;align-items:center;justify-content:space-between;"><span>⚡ I-Week Workshops</span><span style="font-size:10px;font-weight:400;text-transform:none;opacity:.75">Auto-shown on timetable if none picked</span></div>';
+            html += iwItems.map(renderChip).join('');
+          }
+          el.innerHTML = html;
           el.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
             cb.onchange = function () {
               if (cb.checked) { if (selected.indexOf(cb.value) === -1) selected.push(cb.value); }
