@@ -452,21 +452,6 @@
       font-weight: 400;
     }
 
-    .iw-pill {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .4px;
-      background: rgba(234, 179, 8, 0.16);
-      color: #eab308;
-      border: 1px solid rgba(234, 179, 8, 0.32);
-      padding: 1px 6px;
-      border-radius: 5px;
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-    }
-
     .room-chip {
       font-family: var(--font-mono);
       font-size: 11px;
@@ -1753,17 +1738,15 @@
             var seat = getActive().seats[e.key];
             var seatHtml = seat ? '<span class="seat-badge" style="margin-left:6px;">🪑 ' + esc(seat) + '</span>' : '';
             var isIw = e.isIw || (e.key && e.key.indexOf('IW') === 0);
-            var iwTag = isIw ? '<span class="iw-pill">⚡ I-Week</span>' : '';
-            var roomHtml = e.room && e.room.toLowerCase() === 'zoom'
-              ? '<span class="room-chip" style="color:var(--accent);border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.08);">📹 Zoom</span>'
-              : '<span class="room-chip">' + esc(e.room) + '</span>';
-            return '<div class="slot-row' + (ab ? ' absent-row' : '') + '">' +
+            var roomHtml = '<span class="room-chip">' + esc(e.room) + '</span>';
+            var attendBtn = isIw ? '' : '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>';
+            return '<div class="slot-row' + (!isIw && ab ? ' absent-row' : '') + '">' +
               '<div class="slot-time">' + esc(e.slotHeader) + '</div>' +
               '<div class="slot-main">' +
-              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span>' + iwTag + '</div>' +
+              '<div class="slot-top"><span class="subject-badge" style="background:' + col + '">' + esc(e.subject) + (e.section ? '-' + e.section : '') + '<span class="lec-num">#' + esc(e.week || '?') + '</span></span></div>' +
               '<div style="display:flex;align-items:center;">' + roomHtml + seatHtml + '</div>' +
               '</div>' +
-              '<button class="attend-btn' + (ab ? ' is-absent' : '') + '" data-lid="' + esc(lid) + '">' + (ab ? '❌' : '✅') + '</button>' +
+              attendBtn +
               '</div>';
           }).join('');
           return '<div class="day-card' + (isToday ? ' today' : '') + '" data-date="' + esc(date) + '">' +
@@ -2375,12 +2358,12 @@
       function renderAttendance() {
         ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' + navHtml();
         var nav = ROOT.querySelector('.bottom-nav');
-        var page = document.createElement('div'); page.className = 'att-page';
-        if (!getActive().mySubjects.length) {
+        var regularSubs = getActive().mySubjects.filter(function (key) { return key.indexOf('IW') !== 0; });
+        if (!regularSubs.length) {
           page.innerHTML = '<div class="empty-state">No subjects selected.<br>Tap <b>📚</b> to pick yours.</div>';
         } else {
           var events = buildEvents();
-          page.innerHTML = getActive().mySubjects.map(function (key) {
+          page.innerHTML = regularSubs.map(function (key) {
             // Build the complete list of lectures for this subject.
             // When a class is cancelled (via strikethrough or removed from sheet),
             // it is rescheduled in the future, so do not drop it or consider it cancelled permanently.
@@ -2527,7 +2510,7 @@
             html += regItems.map(renderChip).join('');
           }
           if (iwItems.length) {
-            html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px 4px;display:flex;align-items:center;justify-content:space-between;"><span>⚡ I-Week Workshops</span><span style="font-size:10px;font-weight:400;text-transform:none;opacity:.75">Auto-shown on timetable if none picked</span></div>';
+            html += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px 4px;display:flex;align-items:center;justify-content:space-between;"><span>I-Week Workshops</span><span style="font-size:10px;font-weight:400;text-transform:none;opacity:.75">Auto-shown on timetable if none picked</span></div>';
             html += iwItems.map(renderChip).join('');
           }
           el.innerHTML = html;
