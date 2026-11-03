@@ -2358,6 +2358,7 @@
       function renderAttendance() {
         ROOT.innerHTML = '<div class="sticky-container">' + hdrHtml() + '</div>' + navHtml();
         var nav = ROOT.querySelector('.bottom-nav');
+        var page = document.createElement('div'); page.className = 'att-page';
         var regularSubs = getActive().mySubjects.filter(function (key) { return key.indexOf('IW') !== 0; });
         if (!regularSubs.length) {
           page.innerHTML = '<div class="empty-state">No subjects selected.<br>Tap <b>📚</b> to pick yours.</div>';
