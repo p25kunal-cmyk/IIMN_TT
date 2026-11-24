@@ -1464,6 +1464,7 @@
             var effectiveRange = overrideRange || range;
             var effectiveSh = overrideRange ? overrideRange.label : sh;
             var cl = lines.filter(function (l) { return parseLine(l) !== null; });
+            var nonCl = meaningfulLines.filter(function (l) { return parseLine(l) === null; });
             if (!cl.length) {
               var infoText = meaningfulLines.join(' · ');
               var prevInfo = events[events.length - 1];
@@ -1493,6 +1494,21 @@
                 end: lineRange ? dtr(row.date, lineRange.end) : null
               });
             });
+            // If the cell ALSO had non-class lines (quizzes, briefings, exams sharing the slot)
+            if (nonCl.length) {
+              var hasContent = nonCl.some(function (l) { return /[A-Za-z]{2,}/.test(l.replace(/\b(AM|PM)\b/ig, '')); });
+              if (hasContent) {
+                var extraInfoText = nonCl.join(' · ');
+                var prev = events[events.length - 1];
+                if (!prev || prev.type !== 'info' || prev.date !== row.date || prev.text !== extraInfoText) {
+                  events.push({
+                    type: 'info', date: row.date, day: row.day, slotIndex: idx, slotHeader: effectiveSh || sh, text: extraInfoText,
+                    start: effectiveRange ? dtr(row.date, effectiveRange.start) : (range ? dtr(row.date, range.start) : null),
+                    end: effectiveRange ? dtr(row.date, effectiveRange.end) : (range ? dtr(row.date, range.end) : null)
+                  });
+                }
+              }
+            }
           });
         });
         // ── Dedup pass: when the same lecture (same key + week) appears on
@@ -1758,9 +1774,9 @@
         var events = buildEvents();
         var page = document.createElement('div'); page.className = 'cal-page';
 
-        // Build set of dates that have classes
+        // Build set of dates that have classes or events
         var classDates = {};
-        events.forEach(function (e) { if (e.type === 'class' && !e.cancelled) classDates[e.date] = true; });
+        events.forEach(function (e) { if ((e.type === 'class' && !e.cancelled) || e.type === 'info') classDates[e.date] = true; });
 
         var now = new Date();
         var y = calViewMonth.getFullYear(), mo = calViewMonth.getMonth();
