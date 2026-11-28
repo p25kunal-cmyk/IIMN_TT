@@ -94,6 +94,13 @@ function getTimetableData(term) {
       if (richData && richData[i] && richData[i][j]) {
         var richCell = richData[i][j];
         try {
+          // 1. Check if the whole cell has strikethrough (most common in Google Sheets)
+          if (isCellStrikethrough(richCell)) {
+            return text.split('\n').map(function(line) {
+              return line.trim() ? line + ' (cancelled)' : line;
+            }).join('\n');
+          }
+          // 2. Check individual runs for partial strikethrough
           var runs = richCell.getRuns ? richCell.getRuns() : [];
           if (runs.length > 0) {
             var lines = text.split('\n');
@@ -114,10 +121,6 @@ function getTimetableData(term) {
                 return false;
               });
               return isLineStruck ? line + ' (cancelled)' : line;
-            }).join('\n');
-          } else if (isCellStrikethrough(richCell)) {
-            text = text.split('\n').map(function(line) {
-              return line.trim() ? line + ' (cancelled)' : line;
             }).join('\n');
           }
         } catch(err) {
